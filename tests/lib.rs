@@ -1,36 +1,54 @@
-use std::io::{Read, Write};
-use std::net::{Ipv4Addr, SocketAddrV4, TcpStream};
-use std::net::{SocketAddr, TcpListener};
-use std::thread;
+use std::net::Ipv4Addr;
+use std::net::SocketAddr;
+use std::net::SocketAddrV4;
+
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpListener;
+use tokio::net::TcpStream;
+use tokio::sync::Mutex;
 
 use codecrafters_redis::run;
 
-#[test]
-fn sut_responds_pong_when_gets_ping() {
+#[tokio::test]
+async fn sut_responds_pong_when_gets_ping() {
     // Arrange
-    let server = RedisServer::new();
-    let mut stream = TcpStream::connect(server.address).unwrap();
+    let server = RedisServer::new().await;
+    let client = RedisClient::new(server.address).await;
 
     // Act
-    server.ping(&mut stream);
+    let actual = client.ping().await;
 
     // Assert
-    let actual = get_response(&mut stream);
     assert_eq!(actual, "+PONG\r\n");
 }
 
-#[test]
-fn sut_responds_pongs_whenever_gets_pings() {
+#[tokio::test]
+async fn sut_responds_pongs_whenever_gets_pings() {
     // Arrange
-    let server = RedisServer::new();
-    let mut stream = TcpStream::connect(server.address).unwrap();
+    let server = RedisServer::new().await;
+    let client = RedisClient::new(server.address).await;
 
-    // Act
+    // Act & Assert
     for _ in 0..10 {
-        server.ping(&mut stream);
-        let actual = get_response(&mut stream);
+        let actual = client.ping().await;
         assert_eq!(actual, "+PONG\r\n");
     }
+}
+
+#[tokio::test]
+async fn sut_responds_pongs_when_clients_ping() {
+    // Arrange
+    let server = RedisServer::new().await;
+    let client_1 = RedisClient::new(server.address).await;
+    let client_2 = RedisClient::new(server.address).await;
+
+    // Act
+    let (actual_1, actual_2) = tokio::join!(client_1.ping(), client_2.ping());
+
+    // Assert
+    assert_eq!(actual_1, "+PONG\r\n");
+    assert_eq!(actual_2, "+PONG\r\n");
 }
 
 struct RedisServer {
@@ -38,22 +56,41 @@ struct RedisServer {
 }
 
 impl RedisServer {
-    fn new() -> Self {
-        let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0)).unwrap();
+    async fn new() -> Self {
+        let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
         let address = listener.local_addr().unwrap();
-        thread::spawn(|| run(listener));
+        tokio::spawn(run(listener));
         Self { address }
     }
 }
 
-impl RedisServer {
-    fn ping(&self, stream: &mut TcpStream) {
-        stream.write_all(b"*1\r\n$4\r\nPING\r\n").unwrap();
-    }
+struct RedisClient {
+    stream: Mutex<TcpStream>,
 }
 
-fn get_response(stream: &mut TcpStream) -> String {
-    let mut buffer = [0; 1024];
-    let bytes_read = stream.read(&mut buffer).unwrap();
-    String::from_utf8_lossy(&buffer[..bytes_read]).to_string()
+impl RedisClient {
+    async fn new(address: SocketAddr) -> Self {
+        let stream = TcpStream::connect(address).await.unwrap();
+        Self {
+            stream: Mutex::new(stream),
+        }
+    }
+
+    async fn ping(&self) -> String {
+        self.stream
+            .lock()
+            .await
+            .write_all(b"*1\r\n$4\r\nPING\r\n")
+            .await
+            .unwrap();
+        self.get_response().await
+    }
+
+    async fn get_response(&self) -> String {
+        let mut buffer = [0; 1024];
+        let bytes_read = self.stream.lock().await.read(&mut buffer).await.unwrap();
+        String::from_utf8_lossy(&buffer[..bytes_read]).to_string()
+    }
 }

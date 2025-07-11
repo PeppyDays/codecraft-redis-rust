@@ -1,8 +1,9 @@
-use std::net::TcpListener;
+use tokio::net::TcpListener;
 
 use codecrafters_redis::run;
 
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:6379").unwrap();
-    run(listener)
+#[tokio::main]
+async fn main() {
+    let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
+    run(listener).await
 }
