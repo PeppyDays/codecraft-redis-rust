@@ -9,3 +9,7 @@ anyhow = "1"                                   # error handling
 bytes = "1"                                    # helps manage buffers
 thiserror = "2"                                # error handling
 tokio = { version = "1", features = ["full"] } # async networking
+
+[dev-dependencies]
+fake = "4"
+rstest = "0"

@@ -2,6 +2,8 @@ use std::net::Ipv4Addr;
 use std::net::SocketAddr;
 use std::net::SocketAddrV4;
 
+use fake::Fake;
+use fake::faker::lorem::en::Word;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
@@ -24,7 +26,7 @@ async fn sut_responds_pong_when_gets_ping() {
 }
 
 #[tokio::test]
-async fn sut_responds_pongs_whenever_gets_pings() {
+async fn sut_responds_pongs_when_client_pings() {
     // Arrange
     let server = RedisServer::new().await;
     let client = RedisClient::new(server.address).await;
@@ -49,6 +51,21 @@ async fn sut_responds_pongs_when_clients_ping() {
     // Assert
     assert_eq!(actual_1, "+PONG\r\n");
     assert_eq!(actual_2, "+PONG\r\n");
+}
+
+#[tokio::test]
+async fn sut_responds_the_same_message_when_client_echos() {
+    // Arrange
+    let server = RedisServer::new().await;
+    let client = RedisClient::new(server.address).await;
+    let message = Word().fake();
+
+    // Act
+    let actual = client.echo(message).await;
+
+    // Assert
+    let expected = format!("${}\r\n{}\r\n", message.len(), message);
+    assert_eq!(actual, expected);
 }
 
 struct RedisServer {
@@ -88,9 +105,16 @@ impl RedisClient {
         self.get_response().await
     }
 
+    async fn echo(&self, message: &str) -> String {
+        let str = format!("*2\r\n$4\r\nECHO\r\n${}\r\n{}\r\n", message.len(), message);
+        let buf = str.as_bytes();
+        self.stream.lock().await.write_all(buf).await.unwrap();
+        self.get_response().await
+    }
+
     async fn get_response(&self) -> String {
-        let mut buffer = [0; 1024];
-        let bytes_read = self.stream.lock().await.read(&mut buffer).await.unwrap();
-        String::from_utf8_lossy(&buffer[..bytes_read]).to_string()
+        let mut buf = [0; 1024];
+        let bytes_read = self.stream.lock().await.read(&mut buf).await.unwrap();
+        String::from_utf8_lossy(&buf[..bytes_read]).to_string()
     }
 }
