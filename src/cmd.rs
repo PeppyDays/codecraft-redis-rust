@@ -4,75 +4,73 @@ use crate::resp::Value;
 #[derive(Debug, PartialEq)]
 pub enum Cmd {
     Ping,
-    Echo { message: String },
-    Set { key: String, value: String },
-    Get { key: String },
+    Echo {
+        message: String,
+    },
+    Set {
+        key: String,
+        value: String,
+        expires_after: Option<u128>,
+    },
+    Get {
+        key: String,
+    },
 }
 
 impl From<Value> for Cmd {
     fn from(value: Value) -> Self {
-        match value {
-            Value::Array(arr) => Self::parse_array_command(arr),
-            _ => panic!("Unsupported command"),
-        }
-    }
-}
+        let Value::Array(arr) = value else {
+            panic!("Unsupported command");
+        };
+        let Value::BulkString(cmd_name) = arr.first().unwrap() else {
+            panic!("Command name must be a bulk string");
+        };
 
-impl Cmd {
-    fn is_ping(cmd: &str) -> bool {
-        cmd.eq_ignore_ascii_case("PING")
-    }
-
-    fn is_echo(cmd: &str) -> bool {
-        cmd.eq_ignore_ascii_case("ECHO")
-    }
-
-    fn is_set(cmd: &str) -> bool {
-        cmd.eq_ignore_ascii_case("SET")
-    }
-
-    fn is_get(cmd: &str) -> bool {
-        cmd.eq_ignore_ascii_case("GET")
-    }
-
-    fn parse_array_command(arr: Vec<Value>) -> Self {
-        match arr.first().unwrap() {
-            Value::BulkString(cmd) if Self::is_ping(cmd) => Cmd::Ping,
-            Value::BulkString(cmd) if Self::is_echo(cmd) => {
-                if let Value::BulkString(message) = arr.get(1).unwrap() {
-                    Cmd::Echo {
-                        message: message.clone(),
-                    }
-                } else {
+        match cmd_name.to_uppercase().as_str() {
+            "PING" => Cmd::Ping,
+            "ECHO" => {
+                let Value::BulkString(message) = arr.get(1).unwrap() else {
                     panic!("ECHO command expects a bulk string as an argument");
+                };
+                Cmd::Echo {
+                    message: message.clone(),
                 }
             }
-            Value::BulkString(cmd) if Self::is_set(cmd) => {
-                if arr.len() == 3 {
-                    if let (Value::BulkString(key), Value::BulkString(value)) =
-                        (arr.get(1).unwrap(), arr.get(2).unwrap())
-                    {
-                        Cmd::Set {
-                            key: key.clone(),
-                            value: value.clone(),
-                        }
-                    } else {
-                        panic!("SET command expects two bulk strings as arguments");
+            "SET" => {
+                let (Value::BulkString(key), Value::BulkString(value)) =
+                    (arr.get(1).unwrap(), arr.get(2).unwrap())
+                else {
+                    panic!("SET command expects more than two bulk strings as arguments");
+                };
+                let mut expires_after = None;
+
+                if arr.len() == 5 {
+                    let Value::BulkString(px) = arr.get(3).unwrap() else {
+                        panic!("SET command with expiration expects 'PX' as the third argument");
+                    };
+                    if px.to_uppercase() != "PX" {
+                        panic!("SET command with expiration expects 'PX' as the third argument");
                     }
-                } else {
-                    panic!("SET command expects exactly two arguments");
+                    let Value::BulkString(ea) = arr.get(4).unwrap() else {
+                        panic!(
+                            "SET command with expiration expects a number as the fourth argument"
+                        );
+                    };
+                    let ea: u128 = ea.parse().expect("Invalid expiration time");
+                    expires_after = Some(ea);
+                }
+
+                Cmd::Set {
+                    key: key.clone(),
+                    value: value.clone(),
+                    expires_after,
                 }
             }
-            Value::BulkString(cmd) if Self::is_get(cmd) => {
-                if arr.len() == 2 {
-                    if let Value::BulkString(key) = arr.get(1).unwrap() {
-                        Cmd::Get { key: key.clone() }
-                    } else {
-                        panic!("GET command expects a bulk string as argument");
-                    }
-                } else {
-                    panic!("GET command expects exactly one argument");
-                }
+            "GET" => {
+                let Value::BulkString(key) = arr.get(1).unwrap() else {
+                    panic!("GET command expects a bulk string as argument");
+                };
+                Cmd::Get { key: key.clone() }
             }
             _ => panic!("Unsupported command"),
         }
@@ -83,8 +81,12 @@ pub async fn execute(repository: &impl Repository, cmd: Cmd) -> Value {
     match cmd {
         Cmd::Ping => Value::SimpleString("PONG".to_string()),
         Cmd::Echo { message } => Value::BulkString(message),
-        Cmd::Set { key, value } => {
-            repository.set(&key, &value).await;
+        Cmd::Set {
+            key,
+            value,
+            expires_after,
+        } => {
+            repository.set(&key, &value, expires_after).await;
             Value::SimpleString("OK".to_string())
         }
         Cmd::Get { key } => match repository.get(&key).await {
@@ -96,8 +98,11 @@ pub async fn execute(repository: &impl Repository, cmd: Cmd) -> Value {
 
 #[cfg(test)]
 mod specs_for_executing_command {
+    use std::time::Duration;
+
     use fake::Fake;
     use fake::faker::lorem::en::Word;
+    use tokio::time::sleep;
 
     use crate::repository::InMemoryRepository;
     use crate::repository::Repository;
@@ -110,7 +115,7 @@ mod specs_for_executing_command {
 
     #[async_trait::async_trait]
     impl Repository for DummyRepository {
-        async fn set(&self, _key: &str, _value: &str) {}
+        async fn set(&self, _key: &str, _value: &str, _expires_after: Option<u128>) {}
         async fn get(&self, _key: &str) -> Option<String> {
             None
         }
@@ -156,6 +161,7 @@ mod specs_for_executing_command {
         let cmd = Cmd::Set {
             key: key.clone(),
             value: value.clone(),
+            expires_after: None,
         };
 
         // Act
@@ -175,6 +181,7 @@ mod specs_for_executing_command {
         let set_cmd = Cmd::Set {
             key: key.clone(),
             value: value.clone(),
+            expires_after: None,
         };
         execute(&repository, set_cmd).await;
         let get_cmd = Cmd::Get { key: key.clone() };
@@ -186,11 +193,36 @@ mod specs_for_executing_command {
         let expected = Value::BulkString(value);
         assert_eq!(actual, expected);
     }
+
+    #[tokio::test]
+    async fn sut_responds_null_when_gets_get_command_but_value_is_expired() {
+        // Arrange
+        let repository = InMemoryRepository::new();
+        let key = Word().fake::<String>();
+        let value = Word().fake::<String>();
+        let expires_after: u128 = 50;
+        let set_cmd = Cmd::Set {
+            key: key.clone(),
+            value: value.clone(),
+            expires_after: Some(expires_after),
+        };
+        execute(&repository, set_cmd).await;
+        let get_cmd = Cmd::Get { key: key.clone() };
+
+        // Act
+        sleep(Duration::from_millis(60)).await;
+        let actual = execute(&repository, get_cmd).await;
+
+        // Assert
+        let expected = Value::Null;
+        assert_eq!(actual, expected);
+    }
 }
 
 #[cfg(test)]
 mod specs_for_converting_from_value {
     use fake::Fake;
+    use fake::Faker;
     use fake::faker::lorem::en::Word;
 
     use crate::resp::Value;
@@ -255,7 +287,7 @@ mod specs_for_converting_from_value {
     }
 
     #[test]
-    fn sut_parses_set_command_correctly() {
+    fn sut_parses_set_command_without_expiration_correctly() {
         // Arrange
         let set_key: &str = Word().fake();
         let set_value: &str = Word().fake();
@@ -272,6 +304,33 @@ mod specs_for_converting_from_value {
         let expected = Cmd::Set {
             key: set_key.to_string(),
             value: set_value.to_string(),
+            expires_after: None,
+        };
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn sut_parses_set_command_with_expiration_correctly() {
+        // Arrange
+        let set_key: &str = Word().fake();
+        let set_value: &str = Word().fake();
+        let set_expires_after: u128 = Faker.fake();
+        let value = Value::Array(vec![
+            Value::BulkString("SET".to_string()),
+            Value::BulkString(set_key.to_string()),
+            Value::BulkString(set_value.to_string()),
+            Value::BulkString("PX".to_string()),
+            Value::BulkString(set_expires_after.to_string()),
+        ]);
+
+        // Act
+        let actual = Cmd::from(value);
+
+        // Assert
+        let expected = Cmd::Set {
+            key: set_key.to_string(),
+            value: set_value.to_string(),
+            expires_after: Some(set_expires_after),
         };
         assert_eq!(actual, expected);
     }
