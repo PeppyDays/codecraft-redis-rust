@@ -6,7 +6,7 @@ use crate::client::RedisClient;
 use crate::server::RedisServer;
 
 #[tokio::test]
-async fn sut_responds_ok_when_client_sets() {
+async fn sut_responds_ok_when_client_sets_without_expiration() {
     // Arrange
     let server = RedisServer::new().await;
     let client = RedisClient::new(server.address).await;

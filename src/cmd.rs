@@ -22,58 +22,63 @@ impl From<Value> for Cmd {
         let Value::Array(arr) = value else {
             panic!("Unsupported command");
         };
-        let Value::BulkString(cmd_name) = arr.first().unwrap() else {
-            panic!("Command name must be a bulk string");
-        };
 
+        let cmd_name = Self::extract_bulk_string(&arr, 0);
         match cmd_name.to_uppercase().as_str() {
             "PING" => Cmd::Ping,
-            "ECHO" => {
-                let Value::BulkString(message) = arr.get(1).unwrap() else {
-                    panic!("ECHO command expects a bulk string as an argument");
-                };
-                Cmd::Echo {
-                    message: message.clone(),
-                }
-            }
-            "SET" => {
-                let (Value::BulkString(key), Value::BulkString(value)) =
-                    (arr.get(1).unwrap(), arr.get(2).unwrap())
-                else {
-                    panic!("SET command expects more than two bulk strings as arguments");
-                };
-                let mut expires_after = None;
-
-                if arr.len() == 5 {
-                    let Value::BulkString(px) = arr.get(3).unwrap() else {
-                        panic!("SET command with expiration expects 'PX' as the third argument");
-                    };
-                    if px.to_uppercase() != "PX" {
-                        panic!("SET command with expiration expects 'PX' as the third argument");
-                    }
-                    let Value::BulkString(ea) = arr.get(4).unwrap() else {
-                        panic!(
-                            "SET command with expiration expects a number as the fourth argument"
-                        );
-                    };
-                    let ea: u128 = ea.parse().expect("Invalid expiration time");
-                    expires_after = Some(ea);
-                }
-
-                Cmd::Set {
-                    key: key.clone(),
-                    value: value.clone(),
-                    expires_after,
-                }
-            }
-            "GET" => {
-                let Value::BulkString(key) = arr.get(1).unwrap() else {
-                    panic!("GET command expects a bulk string as argument");
-                };
-                Cmd::Get { key: key.clone() }
-            }
+            "ECHO" => Self::parse_echo_command(&arr),
+            "SET" => Self::parse_set_command(&arr),
+            "GET" => Self::parse_get_command(&arr),
             _ => panic!("Unsupported command"),
         }
+    }
+}
+
+impl Cmd {
+    fn extract_bulk_string(arr: &[Value], index: usize) -> &str {
+        let Value::BulkString(s) = arr.get(index).unwrap() else {
+            panic!();
+        };
+        s
+    }
+
+    fn parse_echo_command(arr: &[Value]) -> Self {
+        let message = Self::extract_bulk_string(arr, 1);
+        Cmd::Echo {
+            message: message.to_string(),
+        }
+    }
+
+    fn parse_get_command(arr: &[Value]) -> Self {
+        let key = Self::extract_bulk_string(arr, 1);
+        Cmd::Get {
+            key: key.to_string(),
+        }
+    }
+
+    fn parse_set_command(arr: &[Value]) -> Self {
+        let key = Self::extract_bulk_string(arr, 1);
+        let value = Self::extract_bulk_string(arr, 2);
+        let expires_after = Self::parse_set_expiration(arr);
+        Cmd::Set {
+            key: key.to_string(),
+            value: value.to_string(),
+            expires_after,
+        }
+    }
+
+    fn parse_set_expiration(arr: &[Value]) -> Option<u128> {
+        if arr.len() == 3 {
+            return None;
+        }
+
+        let sub_cmd_name = Self::extract_bulk_string(arr, 3);
+        if sub_cmd_name.to_uppercase() != "PX" {
+            panic!("SET command with expiration expects 'PX' as the third argument");
+        }
+        let expiration_str = Self::extract_bulk_string(arr, 4);
+        let expiration: u128 = expiration_str.parse().expect("Invalid expiration time");
+        Some(expiration)
     }
 }
 

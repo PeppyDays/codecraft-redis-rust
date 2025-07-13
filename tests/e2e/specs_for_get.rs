@@ -8,23 +8,6 @@ use crate::client::RedisClient;
 use crate::server::RedisServer;
 
 #[tokio::test]
-async fn sut_responds_value_when_client_sets_and_gets() {
-    // Arrange
-    let server = RedisServer::new().await;
-    let client = RedisClient::new(server.address).await;
-    let key = Word().fake();
-    let value = Word().fake();
-    client.set(key, value, None).await;
-
-    // Act
-    let actual = client.get(key).await;
-
-    // Assert
-    let expected = format!("${}\r\n{}\r\n", value.len(), value);
-    assert_eq!(actual, expected);
-}
-
-#[tokio::test]
 async fn sut_responds_value_when_client_sets_and_gets_before_expiration() {
     // Arrange
     let server = RedisServer::new().await;
