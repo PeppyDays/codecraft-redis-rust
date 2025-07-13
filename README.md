@@ -32,3 +32,14 @@ Note: This section is for stages 2 and beyond.
    the first time you run it. Subsequent runs will be fast.
 1. Commit your changes and run `git push origin master` to submit your solution
    to CodeCrafters. Test output will be streamed to your terminal.
+
+# Set multiple origins
+
+After cloning the original repository,
+
+```bash
+git remote add all https://github.com/PeppyDays/codecraft-redis-rust.git
+git remote set-url --add --push all https://github.com/PeppyDays/codecraft-redis-rust.git
+git push origin
+git push all
+```
