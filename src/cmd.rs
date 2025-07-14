@@ -1,3 +1,4 @@
+use crate::config::Config;
 use crate::repository::Repository;
 use crate::resp::Value;
 
@@ -15,6 +16,9 @@ pub enum Cmd {
     Get {
         key: String,
     },
+    ConfigGet {
+        key: String,
+    },
 }
 
 impl From<Value> for Cmd {
@@ -29,6 +33,15 @@ impl From<Value> for Cmd {
             "ECHO" => Self::parse_echo_command(&arr),
             "SET" => Self::parse_set_command(&arr),
             "GET" => Self::parse_get_command(&arr),
+            "CONFIG" => {
+                if arr.len() < 3 || Self::extract_bulk_string(&arr, 1).to_uppercase() != "GET" {
+                    panic!("Unsupported CONFIG command");
+                }
+                let key = Self::extract_bulk_string(&arr, 2);
+                Cmd::ConfigGet {
+                    key: key.to_string(),
+                }
+            }
             _ => panic!("Unsupported command"),
         }
     }
@@ -98,6 +111,18 @@ pub async fn execute(repository: &impl Repository, cmd: Cmd) -> Value {
             Some(value) => Value::BulkString(value),
             None => Value::Null,
         },
+        Cmd::ConfigGet { key } => {
+            let config = Config::global();
+            let v = config.get(&key);
+            if v.is_none() {
+                return Value::Null;
+            }
+            let v = v.unwrap();
+            Value::Array(vec![
+                Value::BulkString(key.to_string()),
+                Value::BulkString(v.to_string()),
+            ])
+        }
     }
 }
 

@@ -1,4 +1,5 @@
 mod cmd;
+pub mod config;
 pub mod repository;
 mod resp;
 

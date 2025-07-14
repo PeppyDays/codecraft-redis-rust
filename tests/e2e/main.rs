@@ -1,5 +1,6 @@
 mod client;
 mod server;
+mod specs_for_config;
 mod specs_for_echo;
 mod specs_for_get;
 mod specs_for_ping;
