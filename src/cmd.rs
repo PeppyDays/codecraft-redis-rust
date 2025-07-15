@@ -33,15 +33,7 @@ impl From<Value> for Cmd {
             "ECHO" => Self::parse_echo_command(&arr),
             "SET" => Self::parse_set_command(&arr),
             "GET" => Self::parse_get_command(&arr),
-            "CONFIG" => {
-                if arr.len() < 3 || Self::extract_bulk_string(&arr, 1).to_uppercase() != "GET" {
-                    panic!("Unsupported CONFIG command");
-                }
-                let key = Self::extract_bulk_string(&arr, 2);
-                Cmd::ConfigGet {
-                    key: key.to_string(),
-                }
-            }
+            "CONFIG" => Self::parge_config(arr),
             _ => panic!("Unsupported command"),
         }
     }
@@ -92,6 +84,16 @@ impl Cmd {
         let expiration_str = Self::extract_bulk_string(arr, 4);
         let expiration: u128 = expiration_str.parse().expect("Invalid expiration time");
         Some(expiration)
+    }
+
+    fn parge_config(arr: Vec<Value>) -> Cmd {
+        if arr.len() < 3 || Self::extract_bulk_string(&arr, 1).to_uppercase() != "GET" {
+            panic!("Unsupported CONFIG command");
+        }
+        let key = Self::extract_bulk_string(&arr, 2);
+        Cmd::ConfigGet {
+            key: key.to_string(),
+        }
     }
 }
 
@@ -380,6 +382,26 @@ mod specs_for_converting_from_value {
         // Assert
         let expected = Cmd::Get {
             key: get_key.to_string(),
+        };
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn sut_parses_config_get_command_correctly() {
+        // Arrange
+        let config_key: &str = Word().fake();
+        let value = Value::Array(vec![
+            Value::BulkString("CONFIG".to_string()),
+            Value::BulkString("GET".to_string()),
+            Value::BulkString(config_key.to_string()),
+        ]);
+
+        // Act
+        let actual = Cmd::from(value);
+
+        // Assert
+        let expected = Cmd::ConfigGet {
+            key: config_key.to_string(),
         };
         assert_eq!(actual, expected);
     }
