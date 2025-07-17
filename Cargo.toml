@@ -13,5 +13,5 @@ thiserror = "2"                                # error handling
 tokio = { version = "1", features = ["full"] } # async networking
 
 [dev-dependencies]
-fake = "4"
+fake = { version = "4", features = ["uuid"] }
 rstest = "0"

@@ -16,6 +16,9 @@ pub enum Cmd {
     Get {
         key: String,
     },
+    Keys {
+        pattern: String,
+    },
     ConfigGet {
         key: String,
     },
@@ -33,7 +36,8 @@ impl From<Value> for Cmd {
             "ECHO" => Self::parse_echo_command(&arr),
             "SET" => Self::parse_set_command(&arr),
             "GET" => Self::parse_get_command(&arr),
-            "CONFIG" => Self::parge_config(arr),
+            "KEYS" => Self::parse_keys_command(&arr),
+            "CONFIG" => Self::parge_config(&arr),
             _ => panic!("Unsupported command"),
         }
     }
@@ -72,6 +76,13 @@ impl Cmd {
         }
     }
 
+    fn parse_keys_command(arr: &[Value]) -> Self {
+        let pattern = Self::extract_bulk_string(arr, 1).trim_matches('"');
+        Cmd::Keys {
+            pattern: pattern.to_string(),
+        }
+    }
+
     fn parse_set_expiration(arr: &[Value]) -> Option<u128> {
         if arr.len() == 3 {
             return None;
@@ -86,11 +97,11 @@ impl Cmd {
         Some(expiration)
     }
 
-    fn parge_config(arr: Vec<Value>) -> Cmd {
-        if arr.len() < 3 || Self::extract_bulk_string(&arr, 1).to_uppercase() != "GET" {
+    fn parge_config(arr: &[Value]) -> Cmd {
+        if arr.len() < 3 || Self::extract_bulk_string(arr, 1).to_uppercase() != "GET" {
             panic!("Unsupported CONFIG command");
         }
-        let key = Self::extract_bulk_string(&arr, 2);
+        let key = Self::extract_bulk_string(arr, 2);
         Cmd::ConfigGet {
             key: key.to_string(),
         }
@@ -113,6 +124,15 @@ pub async fn execute(repository: &impl Repository, cmd: Cmd) -> Value {
             Some(value) => Value::BulkString(value),
             None => Value::Null,
         },
+        Cmd::Keys { pattern } => {
+            let keys = repository.get_all_keys().await;
+            Value::Array(
+                keys.into_iter()
+                    .filter(|key| match_asterisk_pattern(&pattern, key))
+                    .map(Value::BulkString)
+                    .collect(),
+            )
+        }
         Cmd::ConfigGet { key } => {
             let config = Config::global();
             let v = config.get(&key);
@@ -128,11 +148,30 @@ pub async fn execute(repository: &impl Repository, cmd: Cmd) -> Value {
     }
 }
 
+fn match_asterisk_pattern(pattern: &str, text: &str) -> bool {
+    if pattern == "*" {
+        return true;
+    }
+
+    if let Some(prefix) = pattern.strip_suffix('*') {
+        text.starts_with(prefix)
+    } else if let Some(suffix) = pattern.strip_prefix('*') {
+        text.ends_with(suffix)
+    } else if let Some(pos) = pattern.find('*') {
+        let prefix = &pattern[..pos];
+        let suffix = &pattern[pos + 1..];
+        text.starts_with(prefix) && text.ends_with(suffix)
+    } else {
+        pattern == text
+    }
+}
+
 #[cfg(test)]
 mod specs_for_executing_command {
     use std::time::Duration;
 
     use fake::Fake;
+    use fake::faker::internet::en::Password;
     use fake::faker::lorem::en::Word;
     use tokio::time::sleep;
 
@@ -150,6 +189,9 @@ mod specs_for_executing_command {
         async fn set(&self, _key: &str, _value: &str, _expires_after: Option<u128>) {}
         async fn get(&self, _key: &str) -> Option<String> {
             None
+        }
+        async fn get_all_keys(&self) -> Vec<String> {
+            vec![]
         }
     }
 
@@ -248,6 +290,100 @@ mod specs_for_executing_command {
         // Assert
         let expected = Value::Null;
         assert_eq!(actual, expected);
+    }
+
+    #[tokio::test]
+    async fn sut_responds_all_keys_when_keys_command_pattern_is_asterisk() {
+        // Arrange
+        let repository = InMemoryRepository::new();
+        let n = (3..=10).fake::<usize>();
+        let keys: Vec<String> = (0..n).map(|_| Password(32..33).fake()).collect();
+        for key in keys.iter() {
+            let cmd = Cmd::Set {
+                key: key.clone(),
+                value: Password(32..33).fake(),
+                expires_after: None,
+            };
+            execute(&repository, cmd).await;
+        }
+        let cmd = Cmd::Keys {
+            pattern: "*".to_string(),
+        };
+
+        // Act
+        let actual = execute(&repository, cmd).await;
+
+        // Assert
+        let expected = Value::Array(keys.into_iter().map(Value::BulkString).collect());
+        assert_eq!(sort_value_array(&actual), sort_value_array(&expected));
+    }
+
+    #[tokio::test]
+    async fn sut_responds_the_given_key_when_keys_command_pattern_is_exactly_the_key() {
+        // Arrange
+        let repository = InMemoryRepository::new();
+        let n = (3..=10).fake::<usize>();
+        let keys: Vec<String> = (0..n).map(|_| Password(32..33).fake()).collect();
+        for key in keys.iter() {
+            let cmd = Cmd::Set {
+                key: key.clone(),
+                value: Word().fake(),
+                expires_after: None,
+            };
+            execute(&repository, cmd).await;
+        }
+        let first_key = keys.first().unwrap();
+        let cmd = Cmd::Keys {
+            pattern: first_key.to_string(),
+        };
+
+        // Act
+        let actual = execute(&repository, cmd).await;
+
+        // Assert
+        let expected = Value::Array(vec![Value::BulkString(first_key.to_string())]);
+        assert_eq!(actual, expected);
+    }
+
+    #[rstest::rstest]
+    #[tokio::test]
+    #[case("h*", vec!["healingpaper"])]
+    async fn sut_responds_the_matched_keys_as_asterisk_to_whatever(
+        #[case] pattern: &str,
+        #[case] expected_keys: Vec<&str>,
+    ) {
+        // Arrange
+        let repository = InMemoryRepository::new();
+        let keys: Vec<&str> = vec!["healingpaper", "arine"];
+        for key in keys.iter() {
+            let cmd = Cmd::Set {
+                key: key.to_string(),
+                value: Password(32..33).fake(),
+                expires_after: None,
+            };
+            execute(&repository, cmd).await;
+        }
+        let cmd = Cmd::Keys {
+            pattern: pattern.to_string(),
+        };
+
+        // Act
+        let actual = execute(&repository, cmd).await;
+
+        // Assert
+        let expected = Value::Array(vec![Value::BulkString("healingpaper".to_string())]);
+        assert_eq!(actual, expected);
+    }
+
+    fn sort_value_array(value: &Value) -> Value {
+        match value {
+            Value::Array(arr) => {
+                let mut sorted_arr = arr.clone();
+                sorted_arr.sort();
+                Value::Array(sorted_arr)
+            }
+            other => other.clone(),
+        }
     }
 }
 
@@ -402,6 +538,45 @@ mod specs_for_converting_from_value {
         // Assert
         let expected = Cmd::ConfigGet {
             key: config_key.to_string(),
+        };
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn sut_parses_keys_command_correctly() {
+        // Arrange
+        let pattern: &str = Word().fake();
+        let value = Value::Array(vec![
+            Value::BulkString("KEYS".to_string()),
+            Value::BulkString(pattern.to_string()),
+        ]);
+
+        // Act
+        let actual = Cmd::from(value);
+
+        // Assert
+        let expected = Cmd::Keys {
+            pattern: pattern.to_string(),
+        };
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn sut_parses_keys_command_and_trim_double_quotes_if_exists_in_pattern() {
+        // Arrange
+        let pattern: String = Word().fake();
+        let surrounded_pattern = format!("\"{pattern}\"");
+        let value = Value::Array(vec![
+            Value::BulkString("KEYS".to_string()),
+            Value::BulkString(surrounded_pattern.to_string()),
+        ]);
+
+        // Act
+        let actual = Cmd::from(value);
+
+        // Assert
+        let expected = Cmd::Keys {
+            pattern: pattern.to_string(),
         };
         assert_eq!(actual, expected);
     }

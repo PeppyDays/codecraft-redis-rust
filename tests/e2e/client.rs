@@ -71,6 +71,17 @@ impl RedisClient {
         self.response().await
     }
 
+    pub async fn keys(&self, pattern: &str) -> String {
+        let str = format!(
+            "*2\r\n$4\r\nKEYS\r\n${}\r\n\"{}\"\r\n",
+            pattern.len() + 2,
+            pattern,
+        );
+        let buf = str.as_bytes();
+        self.stream.lock().await.write_all(buf).await.unwrap();
+        self.response().await
+    }
+
     async fn response(&self) -> String {
         let mut buf = [0; 512];
         let bytes_read = self.stream.lock().await.read(&mut buf).await.unwrap();

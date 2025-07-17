@@ -11,6 +11,7 @@ type ValueWithExpiresAt = (String, Option<u128>);
 pub trait Repository: Send + Sync + 'static {
     async fn set(&self, key: &str, value: &str, expires_after: Option<u128>);
     async fn get(&self, key: &str) -> Option<String>;
+    async fn get_all_keys(&self) -> Vec<String>;
 }
 
 #[derive(Default)]
@@ -55,5 +56,10 @@ impl Repository for InMemoryRepository {
         } else {
             Some(value.clone())
         }
+    }
+
+    async fn get_all_keys(&self) -> Vec<String> {
+        let store = self.store.read().await;
+        store.keys().cloned().collect()
     }
 }
