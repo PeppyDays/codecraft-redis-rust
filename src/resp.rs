@@ -93,31 +93,38 @@ impl From<&[u8]> for Value {
 
 #[cfg(test)]
 mod specs_for_from_bytes_to_value {
+    use fake::Fake;
+    use fake::faker::lorem::en::Word;
+
     use super::Value;
 
     #[test]
     fn sut_deserialises_simple_string_correctly() {
         // Arrange
-        let buf: &[u8] = b"+PING\r\n";
+        let message: &str = Word().fake();
+        let str = format!("+{message}\r\n");
+        let buf = str.as_bytes();
 
         // Act
         let actual = Value::from(buf);
 
         // Assert
-        let expected = Value::SimpleString("PING".to_string());
+        let expected = Value::SimpleString(message.to_string());
         assert_eq!(actual, expected);
     }
 
     #[test]
     fn sut_deserialises_bulk_string_correctly() {
         // Arrange
-        let buf: &[u8] = b"$4\r\nECHO\r\n";
+        let message: &str = Word().fake();
+        let str = format!("${}\r\n{}\r\n", message.len(), message);
+        let buf = str.as_bytes();
 
         // Act
         let actual = Value::from(buf);
 
         // Assert
-        let expected = Value::BulkString("ECHO".to_string());
+        let expected = Value::BulkString(message.to_string());
         assert_eq!(actual, expected);
     }
 

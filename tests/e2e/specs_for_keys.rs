@@ -10,8 +10,8 @@ async fn sut_responds_all_keys_when_client_sends_keys_with_asterisk() {
     // Arrange
     let server = RedisServer::new().await;
     let client = RedisClient::new(server.address).await;
-    let n = (3..=10).fake::<usize>();
-    let keys: Vec<String> = (0..n).map(|_| value()).collect();
+
+    let keys = keys();
     for key in keys.iter() {
         client.set(key, Word().fake(), None).await;
     }
@@ -28,11 +28,12 @@ async fn sut_responds_the_given_key_when_client_sends_keys_without_asterisk() {
     // Arrange
     let server = RedisServer::new().await;
     let client = RedisClient::new(server.address).await;
-    let n = (3..=10).fake::<usize>();
-    let keys: Vec<String> = (0..n).map(|_| value()).collect();
+
+    let keys = keys();
     for key in keys.iter() {
         client.set(key, Word().fake(), None).await;
     }
+
     let first_key = keys.first().unwrap();
 
     // Act
@@ -54,6 +55,7 @@ async fn sut_responds_the_matched_keys_as_asterisk_to_whatever_when_client_sends
     // Arrange
     let server = RedisServer::new().await;
     let client = RedisClient::new(server.address).await;
+
     let keys: Vec<&str> = vec!["hello", "arine", "redis", "hi", "hps"];
     for key in keys {
         client.set(key, &value(), None).await;
@@ -64,6 +66,11 @@ async fn sut_responds_the_matched_keys_as_asterisk_to_whatever_when_client_sends
 
     // Assert
     assert_keys_response(expected_keys, &actual);
+}
+
+fn keys() -> Vec<String> {
+    let n = (3..=10).fake::<usize>();
+    (0..n).map(|_| value()).collect()
 }
 
 fn value() -> String {

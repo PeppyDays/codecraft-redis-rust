@@ -9,6 +9,7 @@ async fn sut_responds_the_same_message_when_client_echos() {
     // Arrange
     let server = RedisServer::new().await;
     let client = RedisClient::new(server.address).await;
+
     let message = Word().fake();
 
     // Act

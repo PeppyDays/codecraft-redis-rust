@@ -10,6 +10,7 @@ async fn sut_responds_ok_when_client_sets_without_expiration() {
     // Arrange
     let server = RedisServer::new().await;
     let client = RedisClient::new(server.address).await;
+
     let key = Word().fake();
     let value = Word().fake();
 
@@ -26,6 +27,7 @@ async fn sut_responds_ok_when_client_sets_with_expiration() {
     // Arrange
     let server = RedisServer::new().await;
     let client = RedisClient::new(server.address).await;
+
     let key = Word().fake();
     let value = Word().fake();
     let expired_after: u128 = Faker.fake();

@@ -18,20 +18,16 @@ impl RedisClient {
     }
 
     pub async fn ping(&self) -> String {
-        self.stream
-            .lock()
-            .await
-            .write_all(b"*1\r\n$4\r\nPING\r\n")
-            .await
-            .unwrap();
-        self.response().await
+        let buf = b"*1\r\n$4\r\nPING\r\n";
+        self.write_to_stream(buf).await;
+        self.read_from_stream().await
     }
 
     pub async fn echo(&self, message: &str) -> String {
         let str = format!("*2\r\n$4\r\nECHO\r\n${}\r\n{}\r\n", message.len(), message);
         let buf = str.as_bytes();
-        self.stream.lock().await.write_all(buf).await.unwrap();
-        self.response().await
+        self.write_to_stream(buf).await;
+        self.read_from_stream().await
     }
 
     pub async fn set(&self, key: &str, value: &str, expires_after: Option<u128>) -> String {
@@ -49,15 +45,15 @@ impl RedisClient {
         };
         let str = format!("{cmd_str}{key_str}{value_str}{expires_after_str}");
         let buf = str.as_bytes();
-        self.stream.lock().await.write_all(buf).await.unwrap();
-        self.response().await
+        self.write_to_stream(buf).await;
+        self.read_from_stream().await
     }
 
     pub async fn get(&self, key: &str) -> String {
         let str = format!("*2\r\n$3\r\nGET\r\n${}\r\n{}\r\n", key.len(), key);
         let buf = str.as_bytes();
-        self.stream.lock().await.write_all(buf).await.unwrap();
-        self.response().await
+        self.write_to_stream(buf).await;
+        self.read_from_stream().await
     }
 
     pub async fn config_get(&self, arg: &str) -> String {
@@ -67,8 +63,8 @@ impl RedisClient {
             arg
         );
         let buf = str.as_bytes();
-        self.stream.lock().await.write_all(buf).await.unwrap();
-        self.response().await
+        self.write_to_stream(buf).await;
+        self.read_from_stream().await
     }
 
     pub async fn keys(&self, pattern: &str) -> String {
@@ -78,13 +74,17 @@ impl RedisClient {
             pattern,
         );
         let buf = str.as_bytes();
-        self.stream.lock().await.write_all(buf).await.unwrap();
-        self.response().await
+        self.write_to_stream(buf).await;
+        self.read_from_stream().await
     }
 
-    async fn response(&self) -> String {
+    async fn write_to_stream(&self, buf: &[u8]) {
+        self.stream.lock().await.write_all(buf).await.unwrap();
+    }
+
+    async fn read_from_stream(&self) -> String {
         let mut buf = [0; 512];
-        let bytes_read = self.stream.lock().await.read(&mut buf).await.unwrap();
-        String::from_utf8_lossy(&buf[..bytes_read]).to_string()
+        let bytes_to_read = self.stream.lock().await.read(&mut buf).await.unwrap();
+        String::from_utf8_lossy(&buf[..bytes_to_read]).to_string()
     }
 }
