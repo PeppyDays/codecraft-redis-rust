@@ -6,7 +6,7 @@ use tokio::net::TcpListener;
 use codecrafters_redis::config::Config;
 use codecrafters_redis::config::RdbConfig;
 use codecrafters_redis::repository::InMemoryRepository;
-use codecrafters_redis::run;
+use codecrafters_redis::runner::run;
 
 #[tokio::main]
 async fn main() {
