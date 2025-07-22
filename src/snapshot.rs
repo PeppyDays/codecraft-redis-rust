@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::Read;
@@ -18,7 +17,6 @@ impl RdbFileReader {
         };
         reader.initialize();
         let _ = reader.header();
-        let _ = reader.metadata();
         reader
     }
 
@@ -32,20 +30,6 @@ impl RdbFileReader {
         String::from_utf8_lossy(&buffer).to_string()
     }
 
-    fn metadata(&self) -> HashMap<String, String> {
-        let indicator = self.read_byte().unwrap();
-        if indicator != 0xFA {
-            panic!("OMG");
-        }
-        let mut metadata = HashMap::new();
-        let name = String::from_utf8_lossy(&self.read_bytes(self.read_size().unwrap()).unwrap())
-            .to_string();
-        let value = String::from_utf8_lossy(&self.read_bytes(self.read_size().unwrap()).unwrap())
-            .to_string();
-        metadata.insert(name, value);
-        metadata
-    }
-
     pub fn entries(&self) -> impl Iterator<Item = (usize, String, String, Option<u128>)> {
         let mut db = 0;
 
@@ -54,6 +38,12 @@ impl RdbFileReader {
                 let entry_type = self.read_byte().ok()?;
 
                 match entry_type {
+                    0xFA => {
+                        // metadata
+                        let _key = self.read_string();
+                        let _value = self.read_string();
+                        continue;
+                    }
                     0xFE => {
                         // DB selector
                         db = self.read_byte().ok()? as usize;
