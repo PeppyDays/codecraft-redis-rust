@@ -119,9 +119,9 @@ impl RdbFileReader {
                     .fold(0usize, |acc, &b| (acc << 8) | b as usize))
             }
             0b11 => match remaining_bites {
-                0xC0 => Ok(1_usize),
-                0xC1 => Ok(2_usize),
-                0xC2 => Ok(4_usize),
+                0x00 => Ok(1_usize),
+                0x01 => Ok(2_usize),
+                0x02 => Ok(4_usize),
                 _ => unimplemented!(),
             },
             _ => unreachable!(),
@@ -166,7 +166,7 @@ mod specs_for_load {
         // Arrange
         let mut file = tempfile().unwrap();
         file.write_all(header()).unwrap();
-        file.write_all(metadata()).unwrap();
+        file.write_all(metadata2()).unwrap();
         file.write_all(entries()).unwrap();
         file.write_all(footer()).unwrap();
 
@@ -236,6 +236,14 @@ mod specs_for_load {
         &[
             0xFA, 0x09, 0x72, 0x65, 0x64, 0x69, 0x73, 0x2D, 0x76, 0x65, 0x72, 0x06, 0x36, 0x2E,
             0x30, 0x2E, 0x31, 0x36,
+        ]
+    }
+
+    fn metadata2() -> &'static [u8] {
+        &[
+            0xfa, 0x09, 0x72, 0x65, 0x64, 0x69, 0x73, 0x2d, 0x76, 0x65, 0x72, 0x05, 0x37, 0x2e,
+            0x32, 0x2e, 0x30, 0xfa, 0x0a, 0x72, 0x65, 0x64, 0x69, 0x73, 0x2d, 0x62, 0x69, 0x74,
+            0x73, 0xc0, 0x40,
         ]
     }
 
