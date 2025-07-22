@@ -112,6 +112,9 @@ mod specs_for_execute {
         async fn get_all_keys(&self) -> Vec<String> {
             vec![]
         }
+        async fn entries(&self) -> Vec<(String, (String, Option<u128>))> {
+            vec![]
+        }
     }
 
     #[tokio::test]

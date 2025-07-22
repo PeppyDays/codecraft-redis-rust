@@ -1,3 +1,6 @@
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
+
 use crate::command::executor::Command;
 use crate::command::executor::CommandExecutor;
 use crate::command::executor::CommandExecutorContext;
@@ -47,13 +50,20 @@ impl Keys {
 #[async_trait::async_trait]
 impl CommandExecutor for Keys {
     async fn execute(&self, context: CommandExecutorContext) -> Value {
-        let keys = context.repository.get_all_keys().await;
-        Value::Array(
-            keys.into_iter()
-                .filter(|key| Keys::match_asterisk_pattern(&self.pattern, key))
-                .map(Value::BulkString)
-                .collect(),
-        )
+        let entries = context.repository.entries().await;
+        let now_in_millis = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let matched_entries = entries
+            .into_iter()
+            .filter(|(key, (_, expiry))| {
+                Keys::match_asterisk_pattern(&self.pattern, key)
+                    && (expiry.is_none() || (expiry.is_some() && expiry.unwrap() >= now_in_millis))
+            })
+            .map(|(key, _)| Value::BulkString(key))
+            .collect();
+        Value::Array(matched_entries)
     }
 }
 
@@ -132,10 +142,12 @@ mod specs_for_parse_from {
 #[cfg(test)]
 mod specs_for_execute {
     use std::sync::Arc;
+    use std::time::Duration;
 
     use fake::Fake;
     use fake::faker::internet::en::Password;
     use fake::faker::lorem::en::Word;
+    use tokio::time::sleep;
 
     use crate::command::executor::CommandExecutor;
     use crate::command::executor::CommandExecutorContext;
@@ -228,6 +240,25 @@ mod specs_for_execute {
 
         // Assert
         let expected = Value::Array(vec![Value::BulkString("healingpaper".to_string())]);
+        assert_eq!(actual, expected);
+    }
+
+    #[tokio::test]
+    async fn sut_responds_with_skipping_expired_keys() {
+        // Arrange
+        let repository = Arc::new(InMemoryRepository::new());
+        let context = CommandExecutorContext::new(repository.clone());
+        repository.set(Word().fake(), Word().fake(), Some(0)).await;
+        let cmd = Keys {
+            pattern: "*".to_string(),
+        };
+
+        // Act
+        sleep(Duration::from_millis(10)).await;
+        let actual = cmd.execute(context).await;
+
+        // Assert
+        let expected = Value::Array(vec![]);
         assert_eq!(actual, expected);
     }
 }

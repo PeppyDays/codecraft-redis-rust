@@ -12,11 +12,10 @@ use codecrafters_redis::runner::run;
 async fn main() {
     let args = Args::parse();
     let config = Config::from(args);
-    Config::initialize(config);
+    Config::initialize(&config);
 
     let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
     let repository = Arc::new(InMemoryRepository::new());
-
     run(listener, repository).await
 }
 

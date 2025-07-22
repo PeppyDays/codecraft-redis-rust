@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::OnceLock;
 
 static GLOBAL_CONFIG: OnceLock<Config> = OnceLock::new();
@@ -13,9 +14,20 @@ pub struct RdbConfig {
     pub filename: String,
 }
 
+impl RdbConfig {
+    pub fn path(&self) -> String {
+        Path::new(&self.directory)
+            .join(&self.filename)
+            .to_string_lossy()
+            .to_string()
+    }
+}
+
 impl Config {
-    pub fn initialize(config: Config) {
-        GLOBAL_CONFIG.set(config).expect("Config already initialized");
+    pub fn initialize(config: &Config) {
+        GLOBAL_CONFIG
+            .set(config.clone())
+            .expect("Config already initialized");
     }
 
     pub fn global() -> &'static Config {
