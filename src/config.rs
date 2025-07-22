@@ -1,7 +1,7 @@
 use std::path::Path;
-use std::sync::OnceLock;
+use std::sync::RwLock;
 
-static GLOBAL_CONFIG: OnceLock<Config> = OnceLock::new();
+static GLOBAL_CONFIG: RwLock<Option<Config>> = RwLock::new(None);
 
 #[derive(Clone, Debug, Default)]
 pub struct Config {
@@ -24,14 +24,13 @@ impl RdbConfig {
 }
 
 impl Config {
-    pub fn initialize(config: &Config) {
-        GLOBAL_CONFIG
-            .set(config.clone())
-            .expect("Config already initialized");
+    pub fn initialize(self) {
+        let mut config = GLOBAL_CONFIG.write().unwrap();
+        *config = Some(self);
     }
 
-    pub fn global() -> &'static Config {
-        GLOBAL_CONFIG.get().expect("Config not initialized")
+    pub fn global() -> Config {
+        GLOBAL_CONFIG.read().unwrap().clone().expect("Config not initialized")
     }
 
     pub fn get(&self, arg: &str) -> Option<&str> {

@@ -19,9 +19,10 @@ pub async fn run(listener: TcpListener, repository: Arc<impl Repository>) {
 
     if let Some(rdb_config) = &Config::global().rdb {
         let path = rdb_config.path();
-        let file = File::open(path).unwrap();
-        let reader = RdbFileReader::new(file);
-        load(reader, context.clone()).await;
+        if let Ok(file) = File::open(path) {
+            let reader = RdbFileReader::new(file);
+            load(reader, context.clone()).await;
+        }
     }
 
     loop {
@@ -45,6 +46,14 @@ async fn load(reader: RdbFileReader, context: CommandExecutorContext) {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis();
+
+        // Skip expired keys
+        if let Some(expiry) = expiry {
+            if expiry <= now_in_millis {
+                continue;
+            }
+        }
+
         let mut v = vec![
             Value::BulkString("SET".to_string()),
             Value::BulkString(key),

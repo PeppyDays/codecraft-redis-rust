@@ -31,7 +31,6 @@ async fn sut_starts_without_any_keys_and_values_when_dir_and_dbfilename_are_prov
     let mut rdb_file = File::create(rdb_directory.path().join("dump.rdb")).unwrap();
     let _ = rdb_file.write(header()).unwrap();
     let _ = rdb_file.write(metadata()).unwrap();
-    let _ = rdb_file.write(metadata()).unwrap();
     let _ = rdb_file.write(footer()).unwrap();
 
     let config = Config {
@@ -58,7 +57,6 @@ async fn sut_loads_entries_in_rdb_file_correctly() {
     let mut rdb_file = File::create(rdb_directory.path().join("dump.rdb")).unwrap();
     let _ = rdb_file.write(header()).unwrap();
     let _ = rdb_file.write(metadata()).unwrap();
-    let _ = rdb_file.write(metadata()).unwrap();
     let _ = rdb_file.write(entries()).unwrap();
     let _ = rdb_file.write(footer()).unwrap();
 
@@ -75,7 +73,7 @@ async fn sut_loads_entries_in_rdb_file_correctly() {
     let actual = client.keys("*").await;
 
     // Assert
-    let expected = "*3\r\n$6\r\nfoobar\r\n$3\r\nfoo\r\n$3\r\nbaz\r\n";
+    let expected = "*1\r\n$6\r\nfoobar\r\n";
     assert_eq!(actual, expected);
 }
 

@@ -20,7 +20,7 @@ impl RedisServer {
     }
 
     pub async fn new_with_config(config: Config) -> Self {
-        Config::initialize(&config);
+        config.initialize();
 
         let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
             .await
