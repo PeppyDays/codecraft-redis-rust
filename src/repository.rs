@@ -11,7 +11,6 @@ type ValueWithExpiresAt = (String, Option<u128>);
 pub trait Repository: Send + Sync + 'static {
     async fn set(&self, key: &str, value: &str, expires_after: Option<u128>);
     async fn get(&self, key: &str) -> Option<String>;
-    async fn get_all_keys(&self) -> Vec<String>;
     async fn entries(&self) -> Vec<(Key, ValueWithExpiresAt)>;
 }
 
@@ -59,16 +58,30 @@ impl Repository for InMemoryRepository {
         }
     }
 
-    async fn get_all_keys(&self) -> Vec<String> {
-        let store = self.store.read().await;
-        store.keys().cloned().collect()
-    }
-
     async fn entries(&self) -> Vec<(Key, ValueWithExpiresAt)> {
         let store = self.store.read().await;
         store
             .iter()
             .map(|(k, (v, e))| (k.clone(), (v.clone(), *e)))
             .collect()
+    }
+}
+
+#[cfg(test)]
+pub mod fixture {
+    use super::Repository;
+
+    #[derive(Default)]
+    pub struct DummyRepository;
+
+    #[async_trait::async_trait]
+    impl Repository for DummyRepository {
+        async fn set(&self, _key: &str, _value: &str, _expires_after: Option<u128>) {}
+        async fn get(&self, _key: &str) -> Option<String> {
+            None
+        }
+        async fn entries(&self) -> Vec<(String, (String, Option<u128>))> {
+            vec![]
+        }
     }
 }

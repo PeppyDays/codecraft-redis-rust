@@ -20,14 +20,13 @@ impl RedisServer {
     }
 
     pub async fn new_with_config(config: Config) -> Self {
-        config.initialize();
-
         let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
             .await
             .unwrap();
         let address = listener.local_addr().unwrap();
         let repository = Arc::new(InMemoryRepository::new());
-        tokio::spawn(run(listener, repository));
+        let config = Arc::new(config);
+        tokio::spawn(run(listener, repository, config));
         Self { address }
     }
 }

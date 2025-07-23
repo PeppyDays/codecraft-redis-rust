@@ -151,6 +151,8 @@ mod specs_for_execute {
 
     use crate::command::executor::CommandExecutor;
     use crate::command::executor::CommandExecutorContext;
+    use crate::command::executor::fixture::command_executor_context;
+    use crate::config::Config;
     use crate::repository::InMemoryRepository;
     use crate::repository::Repository;
     use crate::resp::Value;
@@ -168,15 +170,19 @@ mod specs_for_execute {
         }
     }
 
+    #[rstest::rstest]
     #[tokio::test]
-    async fn sut_responds_all_keys_when_keys_command_pattern_is_asterisk() {
+    async fn sut_responds_all_keys_when_keys_command_pattern_is_asterisk(
+        #[from(command_executor_context)]
+        #[with(InMemoryRepository::new())]
+        context: CommandExecutorContext,
+    ) {
         // Arrange
-        let repository = Arc::new(InMemoryRepository::new());
-        let context = CommandExecutorContext::new(repository.clone());
         let n = (3..=10).fake::<usize>();
         let keys: Vec<String> = (0..n).map(|_| Password(32..33).fake()).collect();
         for key in keys.iter() {
-            repository
+            context
+                .repository
                 .set(key, &Password(32..33).fake::<String>(), None)
                 .await;
         }
@@ -192,15 +198,21 @@ mod specs_for_execute {
         assert_eq!(sort_value_array(&actual), sort_value_array(&expected));
     }
 
+    #[rstest::rstest]
     #[tokio::test]
-    async fn sut_responds_the_given_key_when_keys_command_pattern_is_exactly_the_key() {
+    async fn sut_responds_the_given_key_when_keys_command_pattern_is_exactly_the_key(
+        #[from(command_executor_context)]
+        #[with(InMemoryRepository::new())]
+        context: CommandExecutorContext,
+    ) {
         // Arrange
-        let repository = Arc::new(InMemoryRepository::new());
-        let context = CommandExecutorContext::new(repository.clone());
         let n = (3..=10).fake::<usize>();
         let keys: Vec<String> = (0..n).map(|_| Password(32..33).fake()).collect();
         for key in keys.iter() {
-            repository.set(key, &Word().fake::<String>(), None).await;
+            context
+                .repository
+                .set(key, &Word().fake::<String>(), None)
+                .await;
         }
         let first_key = keys.first().unwrap();
         let cmd = Keys {
@@ -221,13 +233,15 @@ mod specs_for_execute {
     async fn sut_responds_the_matched_keys_as_asterisk_to_whatever(
         #[case] pattern: &str,
         #[case] _expected_keys: Vec<&str>,
+        #[from(command_executor_context)]
+        #[with(InMemoryRepository::new())]
+        context: CommandExecutorContext,
     ) {
         // Arrange
-        let repository = Arc::new(InMemoryRepository::new());
-        let context = CommandExecutorContext::new(repository.clone());
         let keys: Vec<&str> = vec!["healingpaper", "arine"];
         for key in keys.iter() {
-            repository
+            context
+                .repository
                 .set(key, &Password(32..33).fake::<String>(), None)
                 .await;
         }
@@ -243,12 +257,18 @@ mod specs_for_execute {
         assert_eq!(actual, expected);
     }
 
+    #[rstest::rstest]
     #[tokio::test]
-    async fn sut_responds_with_skipping_expired_keys() {
+    async fn sut_responds_with_skipping_expired_keys(
+        #[from(command_executor_context)]
+        #[with(InMemoryRepository::new())]
+        context: CommandExecutorContext,
+    ) {
         // Arrange
-        let repository = Arc::new(InMemoryRepository::new());
-        let context = CommandExecutorContext::new(repository.clone());
-        repository.set(Word().fake(), Word().fake(), Some(0)).await;
+        context
+            .repository
+            .set(Word().fake(), Word().fake(), Some(0))
+            .await;
         let cmd = Keys {
             pattern: "*".to_string(),
         };

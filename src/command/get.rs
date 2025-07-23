@@ -88,44 +88,28 @@ mod specs_for_parse_from {
 
 #[cfg(test)]
 mod specs_for_execute {
-    use std::sync::Arc;
-
     use fake::Fake;
     use fake::faker::lorem::en::Word;
 
     use crate::command::executor::CommandExecutor;
     use crate::command::executor::CommandExecutorContext;
+    use crate::command::executor::fixture::command_executor_context;
     use crate::repository::InMemoryRepository;
-    use crate::repository::Repository;
     use crate::resp::Value;
 
     use super::Get;
 
-    struct DummyRepository;
-
-    #[async_trait::async_trait]
-    impl Repository for DummyRepository {
-        async fn set(&self, _key: &str, _value: &str, _expires_after: Option<u128>) {}
-        async fn get(&self, _key: &str) -> Option<String> {
-            None
-        }
-        async fn get_all_keys(&self) -> Vec<String> {
-            vec![]
-        }
-        async fn entries(&self) -> Vec<(String, (String, Option<u128>))> {
-            vec![]
-        }
-    }
-
+    #[rstest::rstest]
     #[tokio::test]
-    async fn sut_responds_value_when_gets_get_command() {
+    async fn sut_responds_value_when_gets_get_command(
+        #[from(command_executor_context)]
+        #[with(InMemoryRepository::new())]
+        context: CommandExecutorContext,
+    ) {
         // Arrange
-        let repository = Arc::new(InMemoryRepository::new());
-        let context = CommandExecutorContext::new(repository.clone());
         let key = Word().fake::<String>();
         let value = Word().fake::<String>();
-
-        repository.set(&key, &value, None).await;
+        context.repository.set(&key, &value, None).await;
 
         let get_cmd = Get { key: key.clone() };
 
@@ -137,10 +121,12 @@ mod specs_for_execute {
         assert_eq!(actual, expected);
     }
 
+    #[rstest::rstest]
     #[tokio::test]
-    async fn sut_responds_null_when_key_not_found() {
+    async fn sut_responds_null_when_key_not_found(
+        #[from(command_executor_context)] context: CommandExecutorContext,
+    ) {
         // Arrange
-        let context = CommandExecutorContext::new(Arc::new(DummyRepository));
         let key = Word().fake::<String>();
         let get_cmd = Get { key: key.clone() };
 

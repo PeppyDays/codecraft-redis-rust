@@ -151,32 +151,20 @@ mod specs_for_execute {
 
     use crate::command::executor::CommandExecutor;
     use crate::command::executor::CommandExecutorContext;
+    use crate::command::executor::fixture::command_executor_context;
+    use crate::config::Config;
     use crate::repository::InMemoryRepository;
     use crate::repository::Repository;
     use crate::resp::Value;
 
     use super::Set;
 
-    struct DummyRepository;
-
-    #[async_trait::async_trait]
-    impl Repository for DummyRepository {
-        async fn set(&self, _key: &str, _value: &str, _expires_after: Option<u128>) {}
-        async fn get(&self, _key: &str) -> Option<String> {
-            None
-        }
-        async fn get_all_keys(&self) -> Vec<String> {
-            vec![]
-        }
-        async fn entries(&self) -> Vec<(String, (String, Option<u128>))> {
-            vec![]
-        }
-    }
-
+    #[rstest::rstest]
     #[tokio::test]
-    async fn sut_responds_ok_when_gets_set_command() {
+    async fn sut_responds_ok_when_gets_set_command(
+        #[from(command_executor_context)] context: CommandExecutorContext,
+    ) {
         // Arrange
-        let context = CommandExecutorContext::new(Arc::new(DummyRepository));
         let key = Word().fake::<String>();
         let value = Word().fake::<String>();
         let cmd = Set {
@@ -193,11 +181,14 @@ mod specs_for_execute {
         assert_eq!(actual, expected);
     }
 
+    #[rstest::rstest]
     #[tokio::test]
-    async fn sut_responds_value_when_gets_get_command() {
+    async fn sut_responds_value_when_gets_get_command(
+        #[from(command_executor_context)]
+        #[with(InMemoryRepository::new(), Config::default())]
+        context: CommandExecutorContext,
+    ) {
         // Arrange
-        let repository = Arc::new(InMemoryRepository::new());
-        let context = CommandExecutorContext::new(repository.clone());
         let key = Word().fake::<String>();
         let value = Word().fake::<String>();
         let set_cmd = Set {
@@ -208,7 +199,7 @@ mod specs_for_execute {
         set_cmd.execute(context.clone()).await;
 
         // Act
-        let actual = repository.get(&key).await;
+        let actual = context.repository.get(&key).await;
 
         // Assert
         assert_eq!(actual, Some(value));
@@ -218,7 +209,7 @@ mod specs_for_execute {
     async fn sut_responds_null_when_gets_get_command_but_value_is_expired() {
         // Arrange
         let repository = Arc::new(InMemoryRepository::new());
-        let context = CommandExecutorContext::new(repository.clone());
+        let context = CommandExecutorContext::new(repository.clone(), Arc::new(Config::default()));
         let key = Word().fake::<String>();
         let value = Word().fake::<String>();
         let expires_after: u128 = 50;

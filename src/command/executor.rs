@@ -6,6 +6,7 @@ use crate::command::get::Get;
 use crate::command::keys::Keys;
 use crate::command::ping::Ping;
 use crate::command::set::Set;
+use crate::config::Config;
 use crate::repository::Repository;
 use crate::resp::Value;
 
@@ -25,11 +26,12 @@ pub enum CommandSet {
 #[derive(Clone)]
 pub struct CommandExecutorContext {
     pub repository: Arc<dyn Repository>,
+    pub config: Arc<Config>,
 }
 
 impl CommandExecutorContext {
-    pub fn new(repository: Arc<dyn Repository>) -> Self {
-        Self { repository }
+    pub fn new(repository: Arc<dyn Repository>, config: Arc<Config>) -> Self {
+        Self { repository, config }
     }
 }
 
@@ -70,5 +72,23 @@ pub async fn execute(command: CommandSet, context: CommandExecutorContext) -> Va
         CommandSet::Get(get) => get.execute(context).await,
         CommandSet::Keys(keys) => keys.execute(context).await,
         CommandSet::ConfigGet(config_get) => config_get.execute(context).await,
+    }
+}
+
+#[cfg(test)]
+pub mod fixture {
+    use std::sync::Arc;
+
+    use crate::command::executor::CommandExecutorContext;
+    use crate::config::Config;
+    use crate::repository::Repository;
+    use crate::repository::fixture::DummyRepository;
+
+    #[rstest::fixture]
+    pub fn command_executor_context(
+        #[default(DummyRepository)] repository: impl Repository,
+        #[default(Config::default())] config: Config,
+    ) -> CommandExecutorContext {
+        CommandExecutorContext::new(Arc::new(repository), Arc::new(config))
     }
 }

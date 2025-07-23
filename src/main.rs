@@ -11,12 +11,11 @@ use codecrafters_redis::runner::run;
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
-    let config = Config::from(args);
-    config.initialize();
+    let config = Arc::new(Config::from(args));
 
     let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
     let repository = Arc::new(InMemoryRepository::new());
-    run(listener, repository).await
+    run(listener, repository, config).await
 }
 
 #[derive(Debug, clap::Parser)]

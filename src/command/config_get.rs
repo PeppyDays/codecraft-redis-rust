@@ -6,7 +6,6 @@ use crate::command::parser::extract_bulk_string;
 use crate::command::parser::validate_array_length;
 use crate::command::parser::validate_main_command;
 use crate::command::parser::validate_sub_command;
-use crate::config::Config;
 use crate::resp::Value;
 
 #[derive(Debug, Default, PartialEq)]
@@ -30,9 +29,8 @@ impl Command for ConfigGet {
 
 #[async_trait::async_trait]
 impl CommandExecutor for ConfigGet {
-    async fn execute(&self, _context: CommandExecutorContext) -> Value {
-        let config = Config::global();
-        match config.get(&self.key) {
+    async fn execute(&self, context: CommandExecutorContext) -> Value {
+        match context.config.get(&self.key) {
             Some(value) => Value::Array(vec![
                 Value::BulkString(self.key.to_string()),
                 Value::BulkString(value.to_string()),

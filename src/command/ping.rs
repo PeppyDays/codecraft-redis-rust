@@ -51,35 +51,19 @@ mod specs_for_parse_from {
 
 #[cfg(test)]
 mod specs_for_execute {
-    use std::sync::Arc;
-
     use crate::command::executor::CommandExecutor;
     use crate::command::executor::CommandExecutorContext;
-    use crate::repository::Repository;
+    use crate::command::executor::fixture::command_executor_context;
     use crate::resp::Value;
 
     use super::Ping;
 
-    struct DummyRepository;
-
-    #[async_trait::async_trait]
-    impl Repository for DummyRepository {
-        async fn set(&self, _key: &str, _value: &str, _expires_after: Option<u128>) {}
-        async fn get(&self, _key: &str) -> Option<String> {
-            None
-        }
-        async fn get_all_keys(&self) -> Vec<String> {
-            vec![]
-        }
-        async fn entries(&self) -> Vec<(String, (String, Option<u128>))> {
-            vec![]
-        }
-    }
-
+    #[rstest::rstest]
     #[tokio::test]
-    async fn sut_responds_pong_when_gets_ping_command() {
+    async fn sut_responds_pong_when_gets_ping_command(
+        #[from(command_executor_context)] context: CommandExecutorContext,
+    ) {
         // Arrange
-        let context = CommandExecutorContext::new(Arc::new(DummyRepository));
         let command = Ping;
 
         // Act
