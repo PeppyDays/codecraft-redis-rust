@@ -18,3 +18,4 @@ futures = "0"
 fake = { version = "4", features = ["uuid"] }
 rstest = "0"
 tempfile = "3"
+insta = "1"

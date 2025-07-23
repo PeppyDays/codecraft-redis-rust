@@ -1,27 +1,23 @@
 use anyhow::Result;
 use async_stream::stream;
 use futures::Stream;
-use std::path::Path;
-use tokio::fs::File;
+use std::pin::Pin;
+use tokio::io::AsyncRead;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncSeekExt;
 use tokio::io::BufReader;
 use tokio::io::SeekFrom;
 use tokio::sync::Mutex;
 
-pub struct RdbFileReader {
-    reader: Mutex<BufReader<File>>,
+pub struct RdbFileReader<R> {
+    reader: Mutex<BufReader<R>>,
 }
 
-impl RdbFileReader {
-    pub async fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let file = File::open(path).await?;
-        let reader = RdbFileReader {
-            reader: Mutex::new(BufReader::new(file)),
-        };
-        reader.initialize().await?;
-        let _ = reader.header().await?;
-        Ok(reader)
+impl<R: AsyncRead + AsyncSeekExt + Unpin + Send> RdbFileReader<R> {
+    pub fn new(reader: R) -> Self {
+        RdbFileReader {
+            reader: Mutex::new(BufReader::new(reader)),
+        }
     }
 
     async fn initialize(&self) -> Result<()> {
@@ -35,10 +31,16 @@ impl RdbFileReader {
         Ok(String::from_utf8_lossy(&buffer).to_string())
     }
 
-    pub fn entries(&self) -> impl Stream<Item = (usize, String, String, Option<u128>)> + '_ {
+    pub async fn entries(
+        &self,
+    ) -> Result<Pin<Box<dyn Stream<Item = (usize, String, String, Option<u128>)> + Send + '_>>>
+    {
+        self.initialize().await?;
+        self.header().await?;
+
         let mut db = 0;
 
-        stream! {
+        Ok(Box::pin(stream! {
             loop {
                 let entry_type = self.read_byte().await;
 
@@ -90,7 +92,7 @@ impl RdbFileReader {
                     }
                 }
             }
-        }
+        }))
     }
 
     async fn read_byte(&self) -> Result<u8> {
@@ -160,85 +162,30 @@ impl RdbFileReader {
 mod specs_for_load {
     use super::RdbFileReader;
     use futures::StreamExt;
-    use std::io::Write;
-    use tempfile::NamedTempFile;
+    use std::io::Cursor;
 
     #[tokio::test]
     async fn sut_parses_entries_of_rdb_correctly() {
         // Arrange
-        let mut file = NamedTempFile::new().unwrap();
-        file.write_all(header()).unwrap();
-        file.write_all(metadata2()).unwrap();
-        file.write_all(entries()).unwrap();
-        file.write_all(footer()).unwrap();
+        let mut data = Vec::new();
+        data.extend_from_slice(header());
+        data.extend_from_slice(metadata2());
+        data.extend_from_slice(entries());
+        data.extend_from_slice(footer());
+        let cursor = Cursor::new(data);
 
-        let sut = RdbFileReader::new(file.path()).await.unwrap();
-
-        // Act
-        let mut entries = Box::pin(sut.entries());
-        let actual = entries.next().await.unwrap();
-
-        // Assert
-        let expected = (0, "foobar".to_string(), "bazqux".to_string(), None);
-        assert_eq!(actual, expected);
+        let sut = RdbFileReader::new(cursor);
 
         // Act
-        let actual = entries.next().await.unwrap();
+        let entries = sut.entries().await.unwrap().collect::<Vec<_>>().await;
 
         // Assert
-        let expected = (
-            0,
-            "foo".to_string(),
-            "bar".to_string(),
-            Some(1713824559637_u128),
-        );
-        assert_eq!(actual, expected);
-
-        // Act
-        let actual = entries.next().await.unwrap();
-
-        // Assert
-        let expected = (
-            0,
-            "baz".to_string(),
-            "qux".to_string(),
-            Some(1714089298000_u128),
-        );
-        assert_eq!(actual, expected);
-    }
-
-    #[tokio::test]
-    async fn sut_closes_entry_iterator_correctly() {
-        // Arrange
-        let mut file = NamedTempFile::new().unwrap();
-        file.write_all(header()).unwrap();
-        file.write_all(metadata()).unwrap();
-        file.write_all(entries()).unwrap();
-        file.write_all(footer()).unwrap();
-
-        let sut = RdbFileReader::new(file.path()).await.unwrap();
-        let mut entries = Box::pin(sut.entries());
-        let _entry = entries.next().await.unwrap();
-        let _entry = entries.next().await.unwrap();
-        let _entry = entries.next().await.unwrap();
-
-        // Act
-        let actual = entries.next().await;
-
-        // Assert
-        assert!(actual.is_none());
+        insta::assert_debug_snapshot!(entries);
     }
 
     fn header() -> &'static [u8] {
         // REDIS0011
         &[0x52, 0x45, 0x44, 0x49, 0x53, 0x30, 0x30, 0x31, 0x31]
-    }
-
-    fn metadata() -> &'static [u8] {
-        &[
-            0xFA, 0x09, 0x72, 0x65, 0x64, 0x69, 0x73, 0x2D, 0x76, 0x65, 0x72, 0x06, 0x36, 0x2E,
-            0x30, 0x2E, 0x31, 0x36,
-        ]
     }
 
     fn metadata2() -> &'static [u8] {

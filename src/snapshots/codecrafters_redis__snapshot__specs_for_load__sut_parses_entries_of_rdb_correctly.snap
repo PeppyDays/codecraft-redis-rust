@@ -1,0 +1,28 @@
+---
+source: src/snapshot.rs
+expression: entries
+---
+[
+    (
+        0,
+        "foobar",
+        "bazqux",
+        None,
+    ),
+    (
+        0,
+        "foo",
+        "bar",
+        Some(
+            1713824559637,
+        ),
+    ),
+    (
+        0,
+        "baz",
+        "qux",
+        Some(
+            1714089298000,
+        ),
+    ),
+]

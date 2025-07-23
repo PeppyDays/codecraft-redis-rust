@@ -1,6 +1,8 @@
+use futures::stream::StreamExt;
 use std::sync::Arc;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
+use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
@@ -12,14 +14,14 @@ use crate::config::Config;
 use crate::repository::Repository;
 use crate::resp::Value;
 use crate::snapshot::RdbFileReader;
-use futures::stream::StreamExt;
 
 pub async fn run(listener: TcpListener, repository: Arc<impl Repository>) {
     let context = CommandExecutorContext::new(repository);
 
     if let Some(rdb_config) = &Config::global().rdb {
         let path = rdb_config.path();
-        if let Ok(reader) = RdbFileReader::new(path).await {
+        if let Ok(file) = File::open(path).await {
+            let reader = RdbFileReader::new(file);
             load(reader, context.clone()).await;
         }
     }
@@ -39,33 +41,37 @@ pub async fn run(listener: TcpListener, repository: Arc<impl Repository>) {
     }
 }
 
-async fn load(reader: RdbFileReader, context: CommandExecutorContext) {
-    let mut entries = Box::pin(reader.entries());
-    while let Some((_, key, value, expiry)) = entries.next().await {
-        let now_in_millis = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis();
+async fn load<R: tokio::io::AsyncRead + tokio::io::AsyncSeekExt + Unpin + Send>(
+    reader: RdbFileReader<R>,
+    context: CommandExecutorContext,
+) {
+    if let Ok(mut entries) = reader.entries().await {
+        while let Some((_, key, value, expiry)) = entries.next().await {
+            let now_in_millis = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis();
 
-        // Skip expired keys
-        if let Some(expiry) = expiry {
-            if expiry <= now_in_millis {
-                continue;
+            // Skip expired keys
+            if let Some(expiry) = expiry {
+                if expiry <= now_in_millis {
+                    continue;
+                }
             }
-        }
 
-        let mut v = vec![
-            Value::BulkString("SET".to_string()),
-            Value::BulkString(key),
-            Value::BulkString(value),
-        ];
-        if let Some(expiry) = expiry {
-            v.push(Value::BulkString("PX".to_string()));
-            v.push(Value::BulkString((expiry - now_in_millis).to_string()));
+            let mut v = vec![
+                Value::BulkString("SET".to_string()),
+                Value::BulkString(key),
+                Value::BulkString(value),
+            ];
+            if let Some(expiry) = expiry {
+                v.push(Value::BulkString("PX".to_string()));
+                v.push(Value::BulkString((expiry - now_in_millis).to_string()));
+            }
+            let value = Value::Array(v);
+            let command = parse(&value).unwrap();
+            execute(command, context.clone()).await;
         }
-        let value = Value::Array(v);
-        let command = parse(&value).unwrap();
-        execute(command, context.clone()).await;
     }
 }
 
