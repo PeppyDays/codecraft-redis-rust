@@ -11,6 +11,8 @@ bytes = "1"                                    # helps manage buffers
 clap = { version = "4", features = ["derive"] }
 thiserror = "2"                                # error handling
 tokio = { version = "1", features = ["full"] } # async networking
+async-stream = "0"
+futures = "0"
 
 [dev-dependencies]
 fake = { version = "4", features = ["uuid"] }

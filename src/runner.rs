@@ -1,4 +1,3 @@
-use std::fs::File;
 use std::sync::Arc;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
@@ -13,14 +12,14 @@ use crate::config::Config;
 use crate::repository::Repository;
 use crate::resp::Value;
 use crate::snapshot::RdbFileReader;
+use futures::stream::StreamExt;
 
 pub async fn run(listener: TcpListener, repository: Arc<impl Repository>) {
     let context = CommandExecutorContext::new(repository);
 
     if let Some(rdb_config) = &Config::global().rdb {
         let path = rdb_config.path();
-        if let Ok(file) = File::open(path) {
-            let reader = RdbFileReader::new(file);
+        if let Ok(reader) = RdbFileReader::new(path).await {
             load(reader, context.clone()).await;
         }
     }
@@ -41,7 +40,8 @@ pub async fn run(listener: TcpListener, repository: Arc<impl Repository>) {
 }
 
 async fn load(reader: RdbFileReader, context: CommandExecutorContext) {
-    for (_, key, value, expiry) in reader.entries() {
+    let mut entries = Box::pin(reader.entries());
+    while let Some((_, key, value, expiry)) = entries.next().await {
         let now_in_millis = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()

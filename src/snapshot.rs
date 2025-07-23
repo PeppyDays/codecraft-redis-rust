@@ -1,119 +1,122 @@
-use std::fs::File;
-use std::io::BufReader;
-use std::io::Read;
-use std::io::Seek;
-use std::io::SeekFrom;
-use std::iter::from_fn;
-use std::sync::Mutex;
+use anyhow::Result;
+use async_stream::stream;
+use futures::Stream;
+use std::path::Path;
+use tokio::fs::File;
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncSeekExt;
+use tokio::io::BufReader;
+use tokio::io::SeekFrom;
+use tokio::sync::Mutex;
 
 pub struct RdbFileReader {
     reader: Mutex<BufReader<File>>,
 }
 
 impl RdbFileReader {
-    pub fn new(file: File) -> Self {
+    pub async fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let file = File::open(path).await?;
         let reader = RdbFileReader {
             reader: Mutex::new(BufReader::new(file)),
         };
-        reader.initialize();
-        let _ = reader.header();
-        reader
+        reader.initialize().await?;
+        let _ = reader.header().await?;
+        Ok(reader)
     }
 
-    fn initialize(&self) {
-        let mut reader = self.reader.lock().unwrap();
-        reader.seek(SeekFrom::Start(0)).unwrap();
+    async fn initialize(&self) -> Result<()> {
+        let mut reader = self.reader.lock().await;
+        reader.seek(SeekFrom::Start(0)).await?;
+        Ok(())
     }
 
-    fn header(&self) -> String {
-        let buffer = self.read_bytes(9).unwrap();
-        String::from_utf8_lossy(&buffer).to_string()
+    async fn header(&self) -> Result<String> {
+        let buffer = self.read_bytes(9).await?;
+        Ok(String::from_utf8_lossy(&buffer).to_string())
     }
 
-    pub fn entries(&self) -> impl Iterator<Item = (usize, String, String, Option<u128>)> {
+    pub fn entries(&self) -> impl Stream<Item = (usize, String, String, Option<u128>)> + '_ {
         let mut db = 0;
 
-        from_fn(move || {
+        stream! {
             loop {
-                let entry_type = self.read_byte().ok()?;
+                let entry_type = self.read_byte().await;
 
                 match entry_type {
-                    0xFA => {
+                    Ok(0xFA) => {
                         // metadata
-                        let _key = self.read_string();
-                        let _value = self.read_string();
+                        let _key = self.read_string().await;
+                        let _value = self.read_string().await;
                         continue;
                     }
-                    0xFE => {
+                    Ok(0xFE) => {
                         // DB selector
-                        db = self.read_byte().ok()? as usize;
+                        if let Ok(db_num) = self.read_byte().await {
+                            db = db_num as usize;
+                        }
                         continue;
                     }
-                    0xFB => {
+                    Ok(0xFB) => {
                         // hash table size
-                        let _hash_table_size = self.read_size().ok()?;
-                        let _expires_hash_table_size = self.read_size().ok()?;
+                        let _hash_table_size = self.read_size().await;
+                        let _expires_hash_table_size = self.read_size().await;
                         continue;
                     }
-                    0x00 => {
+                    Ok(0x00) => {
                         // entry without expiration
-                        let key = self.read_string().ok()?;
-                        let value = self.read_string().ok()?;
-                        return Some((db, key, value, None));
+                        if let (Ok(key), Ok(value)) = (self.read_string().await, self.read_string().await) {
+                            yield (db, key, value, None);
+                        }
                     }
-                    0xFC => {
+                    Ok(0xFC) => {
                         // Entry with milliseconds expiry
-                        let expiry = self.read_expiry_in_millis().ok()?;
-                        let _encoding = self.read_byte().ok()?;
-                        let key = self.read_string().ok()?;
-                        let value = self.read_string().ok()?;
-                        return Some((db, key, value, Some(expiry)));
+                        if let (Ok(expiry), Ok(_encoding), Ok(key), Ok(value)) = (self.read_expiry_in_millis().await, self.read_byte().await, self.read_string().await, self.read_string().await) {
+                            yield (db, key, value, Some(expiry));
+                        }
                     }
-                    0xFD => {
+                    Ok(0xFD) => {
                         // Entry with seconds expiry
-                        let expiry = self.read_expiry_in_secs().ok()?;
-                        let _encoding = self.read_byte().ok()?;
-                        let key = self.read_string().ok()?;
-                        let value = self.read_string().ok()?;
-                        return Some((db, key, value, Some(expiry)));
+                        if let (Ok(expiry), Ok(_encoding), Ok(key), Ok(value)) = (self.read_expiry_in_secs().await, self.read_byte().await, self.read_string().await, self.read_string().await) {
+                            yield (db, key, value, Some(expiry));
+                        }
                     }
-                    0xFF => {
+                    Ok(0xFF) => {
                         // End of file
-                        return None;
+                        break;
                     }
                     _ => {
                         // Unknown entry type, stop parsing
-                        return None;
+                        break;
                     }
                 }
             }
-        })
+        }
     }
 
-    fn read_byte(&self) -> Result<u8, anyhow::Error> {
+    async fn read_byte(&self) -> Result<u8> {
         let mut buffer = [0u8; 1];
-        self.reader.lock().unwrap().read_exact(&mut buffer)?;
+        self.reader.lock().await.read_exact(&mut buffer).await?;
         Ok(buffer[0])
     }
 
-    fn read_bytes(&self, count: usize) -> Result<Vec<u8>, anyhow::Error> {
+    async fn read_bytes(&self, count: usize) -> Result<Vec<u8>> {
         let mut buffer = vec![0u8; count];
-        self.reader.lock().unwrap().read_exact(&mut buffer)?;
+        self.reader.lock().await.read_exact(&mut buffer).await?;
         Ok(buffer)
     }
 
-    fn read_size(&self) -> Result<usize, anyhow::Error> {
-        let first_byte = self.read_byte()?;
+    async fn read_size(&self) -> Result<usize> {
+        let first_byte = self.read_byte().await?;
         let first_two_bits = (first_byte >> 6) & 0b11;
         let remaining_bites = first_byte & 0b00111111;
         match first_two_bits {
             0b00 => Ok(remaining_bites as usize),
             0b01 => {
-                let second_bytes = self.read_byte()?;
+                let second_bytes = self.read_byte().await?;
                 Ok(((remaining_bites as usize) << 6) + second_bytes as usize)
             }
             0b10 => {
-                let next_four_bytes = self.read_bytes(5)?;
+                let next_four_bytes = self.read_bytes(5).await?;
                 Ok(next_four_bytes
                     .iter()
                     .fold(0usize, |acc, &b| (acc << 8) | b as usize))
@@ -128,14 +131,14 @@ impl RdbFileReader {
         }
     }
 
-    fn read_string(&self) -> Result<String, anyhow::Error> {
-        let size = self.read_size()?;
-        let bytes = self.read_bytes(size)?;
+    async fn read_string(&self) -> Result<String> {
+        let size = self.read_size().await?;
+        let bytes = self.read_bytes(size).await?;
         Ok(String::from_utf8_lossy(&bytes).to_string())
     }
 
-    fn read_expiry_in_millis(&self) -> Result<u128, anyhow::Error> {
-        let bytes = self.read_bytes(8)?;
+    async fn read_expiry_in_millis(&self) -> Result<u128> {
+        let bytes = self.read_bytes(8).await?;
         let expiry_in_millis = bytes
             .iter()
             .enumerate()
@@ -143,8 +146,8 @@ impl RdbFileReader {
         Ok(expiry_in_millis)
     }
 
-    fn read_expiry_in_secs(&self) -> Result<u128, anyhow::Error> {
-        let bytes = self.read_bytes(4)?;
+    async fn read_expiry_in_secs(&self) -> Result<u128> {
+        let bytes = self.read_bytes(4).await?;
         let expiry_in_secs = bytes
             .iter()
             .enumerate()
@@ -155,33 +158,32 @@ impl RdbFileReader {
 
 #[cfg(test)]
 mod specs_for_load {
-    use std::io::Write;
-
-    use tempfile::tempfile;
-
     use super::RdbFileReader;
+    use futures::StreamExt;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
 
-    #[test]
-    fn sut_parses_entries_of_rdb_correctly() {
+    #[tokio::test]
+    async fn sut_parses_entries_of_rdb_correctly() {
         // Arrange
-        let mut file = tempfile().unwrap();
+        let mut file = NamedTempFile::new().unwrap();
         file.write_all(header()).unwrap();
         file.write_all(metadata2()).unwrap();
         file.write_all(entries()).unwrap();
         file.write_all(footer()).unwrap();
 
-        let sut = RdbFileReader::new(file);
+        let sut = RdbFileReader::new(file.path()).await.unwrap();
 
         // Act
-        let mut entries = sut.entries();
-        let actual = entries.next().unwrap();
+        let mut entries = Box::pin(sut.entries());
+        let actual = entries.next().await.unwrap();
 
         // Assert
         let expected = (0, "foobar".to_string(), "bazqux".to_string(), None);
         assert_eq!(actual, expected);
 
         // Act
-        let actual = entries.next().unwrap();
+        let actual = entries.next().await.unwrap();
 
         // Assert
         let expected = (
@@ -193,7 +195,7 @@ mod specs_for_load {
         assert_eq!(actual, expected);
 
         // Act
-        let actual = entries.next().unwrap();
+        let actual = entries.next().await.unwrap();
 
         // Assert
         let expected = (
@@ -205,23 +207,23 @@ mod specs_for_load {
         assert_eq!(actual, expected);
     }
 
-    #[test]
-    fn sut_closes_entry_iterator_correctly() {
+    #[tokio::test]
+    async fn sut_closes_entry_iterator_correctly() {
         // Arrange
-        let mut file = tempfile().unwrap();
+        let mut file = NamedTempFile::new().unwrap();
         file.write_all(header()).unwrap();
         file.write_all(metadata()).unwrap();
         file.write_all(entries()).unwrap();
         file.write_all(footer()).unwrap();
 
-        let sut = RdbFileReader::new(file);
-        let mut entries = sut.entries();
-        let _entry = entries.next().unwrap();
-        let _entry = entries.next().unwrap();
-        let _entry = entries.next().unwrap();
+        let sut = RdbFileReader::new(file.path()).await.unwrap();
+        let mut entries = Box::pin(sut.entries());
+        let _entry = entries.next().await.unwrap();
+        let _entry = entries.next().await.unwrap();
+        let _entry = entries.next().await.unwrap();
 
         // Act
-        let actual = entries.next();
+        let actual = entries.next().await;
 
         // Assert
         assert!(actual.is_none());
