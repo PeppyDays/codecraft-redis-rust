@@ -5,6 +5,7 @@ use crate::command::parser::extract_array;
 use crate::command::parser::extract_bulk_string;
 use crate::command::parser::validate_main_command;
 use crate::command::parser::validate_min_array_length;
+use crate::repository::Entry;
 use crate::resp::Value;
 
 #[derive(Debug, Default, PartialEq)]
@@ -45,9 +46,19 @@ impl Command for Set {
 #[async_trait::async_trait]
 impl CommandExecutor for Set {
     async fn execute(&self, context: CommandExecutorContext) -> Value {
+        let entry = Entry {
+            key: self.key.clone(),
+            value: self.value.clone(),
+            expires_at: self.expires_after.map(|after| {
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() + after
+            }),
+        };
         context
             .repository
-            .set(&self.key, &self.value, self.expires_after)
+            .set(entry)
             .await;
         Value::SimpleString("OK".to_string())
     }

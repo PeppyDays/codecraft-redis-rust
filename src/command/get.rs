@@ -94,6 +94,7 @@ mod specs_for_execute {
     use crate::command::executor::CommandExecutor;
     use crate::command::executor::CommandExecutorContext;
     use crate::command::executor::fixture::command_executor_context;
+    use crate::repository::Entry;
     use crate::repository::InMemoryRepository;
     use crate::resp::Value;
 
@@ -109,7 +110,12 @@ mod specs_for_execute {
         // Arrange
         let key = Word().fake::<String>();
         let value = Word().fake::<String>();
-        context.repository.set(&key, &value, None).await;
+        let entry = Entry {
+            key: key.clone(),
+            value: value.clone(),
+            expires_at: None,
+        };
+        context.repository.set(entry).await;
 
         let get_cmd = Get { key: key.clone() };
 

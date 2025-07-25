@@ -4,19 +4,22 @@ use std::time::UNIX_EPOCH;
 
 use tokio::sync::RwLock;
 
-type Key = String;
-type ValueWithExpiresAt = (String, Option<u128>);
+pub struct Entry {
+    pub key: String,
+    pub value: String,
+    pub expires_at: Option<u128>,
+}
 
 #[async_trait::async_trait]
 pub trait Repository: Send + Sync + 'static {
-    async fn set(&self, key: &str, value: &str, expires_after: Option<u128>);
+    async fn set(&self, entry: Entry);
     async fn get(&self, key: &str) -> Option<String>;
-    async fn entries(&self) -> Vec<(Key, ValueWithExpiresAt)>;
+    async fn entries(&self) -> Vec<Entry>;
 }
 
 #[derive(Default)]
 pub struct InMemoryRepository {
-    store: RwLock<HashMap<Key, ValueWithExpiresAt>>,
+    store: RwLock<HashMap<String, Entry>>,
 }
 
 impl InMemoryRepository {
@@ -24,7 +27,7 @@ impl InMemoryRepository {
         Self::default()
     }
 
-    fn now() -> u128 {
+    fn now_in_millis() -> u128 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -33,7 +36,7 @@ impl InMemoryRepository {
 
     fn is_expired(expires_at: Option<u128>) -> bool {
         match expires_at {
-            Some(expires_at) => Self::now() > expires_at,
+            Some(expires_at) => Self::now_in_millis() > expires_at,
             None => false,
         }
     }
@@ -41,34 +44,38 @@ impl InMemoryRepository {
 
 #[async_trait::async_trait]
 impl Repository for InMemoryRepository {
-    async fn set(&self, key: &str, value: &str, expires_after: Option<u128>) {
-        let expires_at = expires_after.map(|a| Self::now() + a);
+    async fn set(&self, entry: Entry) {
         let mut store = self.store.write().await;
-        store.insert(key.to_string(), (value.to_string(), expires_at));
+        store.insert(entry.key.clone(), entry);
     }
 
     async fn get(&self, key: &str) -> Option<String> {
         let store = self.store.read().await;
-        let (value, expires_at) = store.get(key)?;
+        let entry = store.get(key)?;
 
-        if Self::is_expired(*expires_at) {
+        if Self::is_expired(entry.expires_at) {
             None
         } else {
-            Some(value.clone())
+            Some(entry.value.clone())
         }
     }
 
-    async fn entries(&self) -> Vec<(Key, ValueWithExpiresAt)> {
+    async fn entries(&self) -> Vec<Entry> {
         let store = self.store.read().await;
         store
-            .iter()
-            .map(|(k, (v, e))| (k.clone(), (v.clone(), *e)))
+            .values()
+            .map(|entry| Entry {
+                key: entry.key.clone(),
+                value: entry.value.clone(),
+                expires_at: entry.expires_at,
+            })
             .collect()
     }
 }
 
 #[cfg(test)]
 pub mod fixture {
+    use super::Entry;
     use super::Repository;
 
     #[derive(Default)]
@@ -76,11 +83,11 @@ pub mod fixture {
 
     #[async_trait::async_trait]
     impl Repository for DummyRepository {
-        async fn set(&self, _key: &str, _value: &str, _expires_after: Option<u128>) {}
+        async fn set(&self, _entry: Entry) {}
         async fn get(&self, _key: &str) -> Option<String> {
             None
         }
-        async fn entries(&self) -> Vec<(String, (String, Option<u128>))> {
+        async fn entries(&self) -> Vec<Entry> {
             vec![]
         }
     }

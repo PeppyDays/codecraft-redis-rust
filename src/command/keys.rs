@@ -57,11 +57,11 @@ impl CommandExecutor for Keys {
             .as_millis();
         let matched_entries = entries
             .into_iter()
-            .filter(|(key, (_, expiry))| {
-                Keys::match_asterisk_pattern(&self.pattern, key)
-                    && (expiry.is_none() || (expiry.is_some() && expiry.unwrap() >= now_in_millis))
+            .filter(|entry| {
+                Keys::match_asterisk_pattern(&self.pattern, &entry.key)
+                    && (entry.expires_at.is_none() || (entry.expires_at.is_some() && entry.expires_at.unwrap() >= now_in_millis))
             })
-            .map(|(key, _)| Value::BulkString(key))
+            .map(|entry| Value::BulkString(entry.key))
             .collect();
         Value::Array(matched_entries)
     }
@@ -151,6 +151,7 @@ mod specs_for_execute {
     use crate::command::executor::CommandExecutor;
     use crate::command::executor::CommandExecutorContext;
     use crate::command::executor::fixture::command_executor_context;
+    use crate::repository::Entry;
     use crate::repository::InMemoryRepository;
     use crate::resp::Value;
 
@@ -180,7 +181,11 @@ mod specs_for_execute {
         for key in keys.iter() {
             context
                 .repository
-                .set(key, &Password(32..33).fake::<String>(), None)
+                .set(Entry {
+                    key: key.to_string(),
+                    value: Password(32..33).fake::<String>(),
+                    expires_at: None,
+                })
                 .await;
         }
         let cmd = Keys {
@@ -208,7 +213,11 @@ mod specs_for_execute {
         for key in keys.iter() {
             context
                 .repository
-                .set(key, &Word().fake::<String>(), None)
+                .set(Entry {
+                    key: key.to_string(),
+                    value: Word().fake::<String>(),
+                    expires_at: None,
+                })
                 .await;
         }
         let first_key = keys.first().unwrap();
@@ -239,7 +248,11 @@ mod specs_for_execute {
         for key in keys.iter() {
             context
                 .repository
-                .set(key, &Password(32..33).fake::<String>(), None)
+                .set(Entry {
+                    key: key.to_string(),
+                    value: Password(32..33).fake::<String>(),
+                    expires_at: None,
+                })
                 .await;
         }
         let cmd = Keys {
@@ -262,9 +275,14 @@ mod specs_for_execute {
         context: CommandExecutorContext,
     ) {
         // Arrange
+        let entry = Entry {
+            key: Word().fake(),
+            value: Word().fake(),
+            expires_at: Some(0),
+        };
         context
             .repository
-            .set(Word().fake(), Word().fake(), Some(0))
+            .set(entry)
             .await;
         let cmd = Keys {
             pattern: "*".to_string(),
