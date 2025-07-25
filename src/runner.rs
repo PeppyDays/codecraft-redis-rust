@@ -1,7 +1,5 @@
 use futures::stream::StreamExt;
 use std::sync::Arc;
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
 use tokio::fs::File;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncReadExt;
@@ -48,30 +46,14 @@ async fn load<R: AsyncRead + AsyncSeekExt + Unpin + Send>(
     context: CommandExecutorContext,
 ) {
     let mut entries = reader.entries().await;
-    while let Some((_, key, value, expiry)) = entries.next().await {
-        let now_in_millis = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis();
-
-        if let Some(expiry) = expiry {
-            if expiry <= now_in_millis {
+    while let Some(entry) = entries.next().await {
+        if let Some(expiry) = &entry.expiry {
+            if expiry.is_expired() {
                 continue;
             }
         }
 
-        let mut v = vec![
-            Value::BulkString("SET".to_string()),
-            Value::BulkString(key),
-            Value::BulkString(value),
-        ];
-        if let Some(expiry) = expiry {
-            v.push(Value::BulkString("PX".to_string()));
-            v.push(Value::BulkString((expiry - now_in_millis).to_string()));
-        }
-        let value = Value::Array(v);
-        let command = parse(&value).unwrap();
-        execute(command, context.clone()).await;
+        context.repository.set(entry).await;
     }
 }
 

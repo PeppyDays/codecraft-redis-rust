@@ -33,6 +33,7 @@ impl Expiry {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct Entry {
     pub key: String,
     pub value: String,

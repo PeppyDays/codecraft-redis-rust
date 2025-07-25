@@ -3,26 +3,29 @@ source: src/snapshot.rs
 expression: entries
 ---
 [
-    (
-        0,
-        "foobar",
-        "bazqux",
-        None,
-    ),
-    (
-        0,
-        "foo",
-        "bar",
-        Some(
-            1713824559637,
+    Entry {
+        key: "foobar",
+        value: "bazqux",
+        expiry: None,
+    },
+    Entry {
+        key: "foo",
+        value: "bar",
+        expiry: Some(
+            Expiry {
+                epoch: 1713824559637,
+                unit: Millisecond,
+            },
         ),
-    ),
-    (
-        0,
-        "baz",
-        "qux",
-        Some(
-            1714089298000,
+    },
+    Entry {
+        key: "baz",
+        value: "qux",
+        expiry: Some(
+            Expiry {
+                epoch: 1714089298000,
+                unit: Millisecond,
+            },
         ),
-    ),
+    },
 ]

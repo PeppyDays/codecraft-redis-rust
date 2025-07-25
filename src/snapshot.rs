@@ -9,6 +9,10 @@ use tokio::io::BufReader;
 use tokio::io::SeekFrom;
 use tokio::sync::Mutex;
 
+use crate::repository::Entry;
+use crate::repository::Expiry;
+use crate::repository::TimeUnit;
+
 pub struct RdbFileReader<R> {
     reader: Mutex<BufReader<R>>,
 }
@@ -31,13 +35,9 @@ impl<R: AsyncRead + AsyncSeekExt + Unpin + Send> RdbFileReader<R> {
         Ok(String::from_utf8_lossy(&buffer).to_string())
     }
 
-    pub async fn entries(
-        &self,
-    ) -> Pin<Box<dyn Stream<Item = (usize, String, String, Option<u128>)> + Send + '_>> {
+    pub async fn entries(&self) -> Pin<Box<dyn Stream<Item = Entry> + Send + '_>> {
         self.initialize().await.unwrap();
         self.header().await.unwrap();
-
-        let mut db = 0;
 
         Box::pin(stream! {
             loop {
@@ -52,9 +52,7 @@ impl<R: AsyncRead + AsyncSeekExt + Unpin + Send> RdbFileReader<R> {
                     }
                     Ok(0xFE) => {
                         // db selector
-                        if let Ok(db_num) = self.read_byte().await {
-                            db = db_num as usize;
-                        }
+                        let _db = self.read_byte().await;
                         continue;
                     }
                     Ok(0xFB) => {
@@ -66,19 +64,37 @@ impl<R: AsyncRead + AsyncSeekExt + Unpin + Send> RdbFileReader<R> {
                     Ok(0x00) => {
                         // entry without expiration
                         if let (Ok(key), Ok(value)) = (self.read_string().await, self.read_string().await) {
-                            yield (db, key, value, None);
+                            yield Entry {
+                                key,
+                                value,
+                                expiry: None,
+                            };
                         }
                     }
                     Ok(0xFC) => {
                         // entry with milliseconds expiry
-                        if let (Ok(expiry), Ok(_encoding), Ok(key), Ok(value)) = (self.read_expiry_in_millis().await, self.read_byte().await, self.read_string().await, self.read_string().await) {
-                            yield (db, key, value, Some(expiry));
+                        if let (Ok(expiry_millis), Ok(_encoding), Ok(key), Ok(value)) = (self.read_expiry_in_millis().await, self.read_byte().await, self.read_string().await, self.read_string().await) {
+                            yield Entry {
+                                key,
+                                value,
+                                expiry: Some(Expiry {
+                                    epoch: expiry_millis,
+                                    unit: TimeUnit::Millisecond,
+                                }),
+                            };
                         }
                     }
                     Ok(0xFD) => {
                         // entry with seconds expiry
-                        if let (Ok(expiry), Ok(_encoding), Ok(key), Ok(value)) = (self.read_expiry_in_secs().await, self.read_byte().await, self.read_string().await, self.read_string().await) {
-                            yield (db, key, value, Some(expiry));
+                        if let (Ok(expiry_secs), Ok(_encoding), Ok(key), Ok(value)) = (self.read_expiry_in_secs().await, self.read_byte().await, self.read_string().await, self.read_string().await) {
+                            yield Entry {
+                                key,
+                                value,
+                                expiry: Some(Expiry {
+                                    epoch: expiry_secs,
+                                    unit: TimeUnit::Millisecond, // read_expiry_in_secs already converts to milliseconds
+                                }),
+                            };
                         }
                     }
                     Ok(0xFF) => {
