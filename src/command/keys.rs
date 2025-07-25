@@ -59,7 +59,7 @@ impl CommandExecutor for Keys {
             .into_iter()
             .filter(|entry| {
                 Keys::match_asterisk_pattern(&self.pattern, &entry.key)
-                    && (entry.expires_at.is_none() || (entry.expires_at.is_some() && entry.expires_at.unwrap() >= now_in_millis))
+                    && (entry.expiry.is_none() || (entry.expiry.as_ref().map(|e| e.to_millis()).unwrap_or(0) >= now_in_millis))
             })
             .map(|entry| Value::BulkString(entry.key))
             .collect();
@@ -152,7 +152,9 @@ mod specs_for_execute {
     use crate::command::executor::CommandExecutorContext;
     use crate::command::executor::fixture::command_executor_context;
     use crate::repository::Entry;
+    use crate::repository::Expiry;
     use crate::repository::InMemoryRepository;
+    use crate::repository::TimeUnit;
     use crate::resp::Value;
 
     use super::Keys;
@@ -184,7 +186,7 @@ mod specs_for_execute {
                 .set(Entry {
                     key: key.to_string(),
                     value: Password(32..33).fake::<String>(),
-                    expires_at: None,
+                    expiry: None,
                 })
                 .await;
         }
@@ -216,7 +218,7 @@ mod specs_for_execute {
                 .set(Entry {
                     key: key.to_string(),
                     value: Word().fake::<String>(),
-                    expires_at: None,
+                    expiry: None,
                 })
                 .await;
         }
@@ -251,7 +253,7 @@ mod specs_for_execute {
                 .set(Entry {
                     key: key.to_string(),
                     value: Password(32..33).fake::<String>(),
-                    expires_at: None,
+                    expiry: None,
                 })
                 .await;
         }
@@ -278,7 +280,10 @@ mod specs_for_execute {
         let entry = Entry {
             key: Word().fake(),
             value: Word().fake(),
-            expires_at: Some(0),
+            expiry: Some(Expiry {
+                epoch: 0,
+                unit: TimeUnit::Millisecond,
+            }),
         };
         context
             .repository

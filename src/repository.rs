@@ -4,10 +4,39 @@ use std::time::UNIX_EPOCH;
 
 use tokio::sync::RwLock;
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum TimeUnit {
+    Second,
+    Millisecond,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Expiry {
+    pub epoch: u128,
+    pub unit: TimeUnit,
+}
+
+impl Expiry {
+    pub fn to_millis(&self) -> u128 {
+        match self.unit {
+            TimeUnit::Second => self.epoch * 1000,
+            TimeUnit::Millisecond => self.epoch,
+        }
+    }
+
+    pub fn is_expired(&self) -> bool {
+        let now_in_millis = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        now_in_millis > self.to_millis()
+    }
+}
+
 pub struct Entry {
     pub key: String,
     pub value: String,
-    pub expires_at: Option<u128>,
+    pub expiry: Option<Expiry>,
 }
 
 #[async_trait::async_trait]
@@ -26,20 +55,6 @@ impl InMemoryRepository {
     pub fn new() -> Self {
         Self::default()
     }
-
-    fn now_in_millis() -> u128 {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis()
-    }
-
-    fn is_expired(expires_at: Option<u128>) -> bool {
-        match expires_at {
-            Some(expires_at) => Self::now_in_millis() > expires_at,
-            None => false,
-        }
-    }
 }
 
 #[async_trait::async_trait]
@@ -53,11 +68,13 @@ impl Repository for InMemoryRepository {
         let store = self.store.read().await;
         let entry = store.get(key)?;
 
-        if Self::is_expired(entry.expires_at) {
-            None
-        } else {
-            Some(entry.value.clone())
+        if let Some(expiry) = &entry.expiry {
+            if expiry.is_expired() {
+                return None;
+            }
         }
+
+        Some(entry.value.clone())
     }
 
     async fn entries(&self) -> Vec<Entry> {
@@ -67,7 +84,7 @@ impl Repository for InMemoryRepository {
             .map(|entry| Entry {
                 key: entry.key.clone(),
                 value: entry.value.clone(),
-                expires_at: entry.expires_at,
+                expiry: entry.expiry.clone(),
             })
             .collect()
     }

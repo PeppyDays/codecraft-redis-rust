@@ -113,7 +113,7 @@ mod specs_for_execute {
         let entry = Entry {
             key: key.clone(),
             value: value.clone(),
-            expires_at: None,
+            expiry: None,
         };
         context.repository.set(entry).await;
 
