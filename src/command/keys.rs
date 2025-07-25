@@ -141,7 +141,6 @@ mod specs_for_parse_from {
 
 #[cfg(test)]
 mod specs_for_execute {
-    use std::sync::Arc;
     use std::time::Duration;
 
     use fake::Fake;
@@ -152,9 +151,7 @@ mod specs_for_execute {
     use crate::command::executor::CommandExecutor;
     use crate::command::executor::CommandExecutorContext;
     use crate::command::executor::fixture::command_executor_context;
-    use crate::config::Config;
     use crate::repository::InMemoryRepository;
-    use crate::repository::Repository;
     use crate::resp::Value;
 
     use super::Keys;
