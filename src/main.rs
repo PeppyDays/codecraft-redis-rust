@@ -1,4 +1,3 @@
-use std::net::Ipv4Addr;
 use std::sync::Arc;
 
 use clap::Parser;
@@ -14,7 +13,7 @@ async fn main() {
     let args = Args::parse();
     let config = Arc::new(Config::from(args));
 
-    let url = format!("{}:{}", Ipv4Addr::LOCALHOST, config.port);
+    let url = format!("127.0.0.1:{}", config.port);
     let listener = TcpListener::bind(url).await.unwrap();
     let repository = Arc::new(InMemoryRepository::new());
     run(listener, repository, config).await
