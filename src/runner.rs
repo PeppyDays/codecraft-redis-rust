@@ -1,9 +1,6 @@
-use futures::stream::StreamExt;
 use std::sync::Arc;
 use tokio::fs::File;
-use tokio::io::AsyncRead;
 use tokio::io::AsyncReadExt;
-use tokio::io::AsyncSeekExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 
@@ -13,16 +10,15 @@ use crate::command::executor::parse;
 use crate::config::Config;
 use crate::repository::Repository;
 use crate::resp::Value;
-use crate::snapshot::RdbFileReader;
+use crate::snapshot::load;
 
 pub async fn run(listener: TcpListener, repository: Arc<impl Repository>, config: Arc<Config>) {
-    let context = CommandExecutorContext::new(repository, config.clone());
+    let context = CommandExecutorContext::new(repository.clone(), config.clone());
 
     if let Some(rdb_config) = &config.rdb {
         let path = rdb_config.path();
         if let Ok(file) = File::open(path).await {
-            let reader = RdbFileReader::new(file);
-            load(reader, context.clone()).await;
+            load(file, repository).await;
         }
     }
 
@@ -38,22 +34,6 @@ pub async fn run(listener: TcpListener, repository: Arc<impl Repository>, config
                 eprintln!("{e}");
             }
         };
-    }
-}
-
-async fn load<R: AsyncRead + AsyncSeekExt + Unpin + Send>(
-    reader: RdbFileReader<R>,
-    context: CommandExecutorContext,
-) {
-    let mut entries = reader.entries().await;
-    while let Some(entry) = entries.next().await {
-        if let Some(expiry) = &entry.expiry {
-            if expiry.is_expired() {
-                continue;
-            }
-        }
-
-        context.repository.set(entry).await;
     }
 }
 

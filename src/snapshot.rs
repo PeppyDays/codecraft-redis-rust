@@ -1,7 +1,9 @@
 use anyhow::Result;
 use async_stream::stream;
 use futures::Stream;
+use futures::StreamExt;
 use std::pin::Pin;
+use std::sync::Arc;
 use tokio::io::AsyncRead;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncSeekExt;
@@ -11,9 +13,26 @@ use tokio::sync::Mutex;
 
 use crate::repository::Entry;
 use crate::repository::Expiry;
+use crate::repository::Repository;
 use crate::repository::TimeUnit;
 
-pub struct RdbFileReader<R> {
+pub async fn load<R: AsyncRead + AsyncSeekExt + Unpin + Send>(
+    reader: R,
+    repository: Arc<impl Repository>,
+) {
+    let rdb_file_reader = RdbFileReader::new(reader);
+    let mut entries = rdb_file_reader.entries().await;
+    while let Some(entry) = entries.next().await {
+        if let Some(expiry) = &entry.expiry {
+            if expiry.is_expired() {
+                continue;
+            }
+        }
+        repository.set(entry).await;
+    }
+}
+
+struct RdbFileReader<R> {
     reader: Mutex<BufReader<R>>,
 }
 
