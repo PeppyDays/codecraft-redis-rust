@@ -1,4 +1,3 @@
-use std::net::Ipv4Addr;
 use std::path::Path;
 
 #[derive(Clone, Debug, Default)]
@@ -42,7 +41,7 @@ impl Default for ReplicationMaster {
 
 #[derive(Clone, Debug)]
 pub struct ReplicationSlave {
-    pub host: Ipv4Addr,
+    pub host: String,
     pub port: usize,
 }
 

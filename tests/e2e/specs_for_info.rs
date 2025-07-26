@@ -1,5 +1,3 @@
-use std::net::Ipv4Addr;
-
 use codecrafters_redis::config::Config;
 use codecrafters_redis::config::Replication;
 use codecrafters_redis::config::ReplicationMaster;
@@ -15,7 +13,7 @@ async fn sut_responds_replication_role_as_slave_if_replication_is_set() {
         replication: Replication {
             master: ReplicationMaster::default(),
             slave: Some(ReplicationSlave {
-                host: Ipv4Addr::LOCALHOST,
+                host: "localhost".to_string(),
                 port: 6380,
             }),
         },

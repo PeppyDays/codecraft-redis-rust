@@ -1,5 +1,4 @@
 use std::net::Ipv4Addr;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use clap::Parser;
@@ -49,7 +48,7 @@ impl From<Args> for Config {
             if parts.len() == 2 {
                 if let Ok(port) = parts[1].parse::<usize>() {
                     config.replication.slave = Some(ReplicationSlave {
-                        host: Ipv4Addr::from_str(parts[0]).unwrap(),
+                        host: parts[0].to_string(),
                         port,
                     });
                 }

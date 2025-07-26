@@ -83,7 +83,6 @@ mod specs_for_parse_from {
 
 #[cfg(test)]
 mod specs_for_execute {
-    use std::net::Ipv4Addr;
     use std::sync::Arc;
 
     use crate::command::executor::CommandExecutor;
@@ -125,7 +124,7 @@ mod specs_for_execute {
             replication: Replication {
                 master: ReplicationMaster::default(),
                 slave: Some(ReplicationSlave {
-                    host: Ipv4Addr::LOCALHOST,
+                    host: "localhost".to_string(),
                     port: 6380,
                 }),
             },
