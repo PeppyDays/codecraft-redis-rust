@@ -47,7 +47,7 @@ impl Command for Set {
 
 #[async_trait::async_trait]
 impl CommandExecutor for Set {
-    async fn execute(&self, context: CommandExecutorContext) -> Value {
+    async fn execute(&self, context: &CommandExecutorContext) -> Value {
         let expiry = self.expires_after.map(|after| {
             let current_time = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -65,10 +65,7 @@ impl CommandExecutor for Set {
             expiry,
         };
 
-        context
-            .repository
-            .set(entry)
-            .await;
+        context.repository.set(entry).await;
         Value::SimpleString("OK".to_string())
     }
 }
@@ -194,7 +191,7 @@ mod specs_for_execute {
         };
 
         // Act
-        let actual = cmd.execute(context).await;
+        let actual = cmd.execute(&context).await;
 
         // Assert
         let expected = Value::SimpleString("OK".to_string());
@@ -216,7 +213,7 @@ mod specs_for_execute {
             value: value.clone(),
             expires_after: None,
         };
-        set_cmd.execute(context.clone()).await;
+        set_cmd.execute(&context).await;
 
         // Act
         let actual = context.repository.get(&key).await;
@@ -238,7 +235,7 @@ mod specs_for_execute {
             value: value.clone(),
             expires_after: Some(expires_after),
         };
-        set_cmd.execute(context).await;
+        set_cmd.execute(&context).await;
 
         // Act
         sleep(Duration::from_millis(60)).await;

@@ -29,7 +29,7 @@ impl Command for ConfigGet {
 
 #[async_trait::async_trait]
 impl CommandExecutor for ConfigGet {
-    async fn execute(&self, context: CommandExecutorContext) -> Value {
+    async fn execute(&self, context: &CommandExecutorContext) -> Value {
         match context.config.get(&self.key) {
             Some(value) => Value::Array(vec![
                 Value::BulkString(self.key.to_string()),

@@ -22,7 +22,7 @@ impl Command for InfoReplication {
 
 #[async_trait::async_trait]
 impl CommandExecutor for InfoReplication {
-    async fn execute(&self, context: CommandExecutorContext) -> Value {
+    async fn execute(&self, context: &CommandExecutorContext) -> Value {
         let mut properties = Vec::new();
 
         if context.config.replication.slave.is_some() {
@@ -111,7 +111,7 @@ mod specs_for_execute {
         let command = InfoReplication;
 
         // Act
-        let actual = extract_bulk_string(command.execute(context).await).unwrap();
+        let actual = extract_bulk_string(command.execute(&context).await).unwrap();
 
         // Assert
         assert!(actual.contains(expected));
@@ -137,7 +137,7 @@ mod specs_for_execute {
         let command = InfoReplication;
 
         // Act
-        let actual = extract_bulk_string(command.execute(context).await).unwrap();
+        let actual = extract_bulk_string(command.execute(&context).await).unwrap();
 
         // Assert
         let expected = "role:slave";

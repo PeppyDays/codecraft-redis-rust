@@ -39,7 +39,7 @@ impl CommandExecutorContext {
 
 #[async_trait::async_trait]
 pub trait CommandExecutor {
-    async fn execute(&self, context: CommandExecutorContext) -> Value;
+    async fn execute(&self, context: &CommandExecutorContext) -> Value;
 }
 
 pub fn parse(value: &Value) -> Result<CommandSet, anyhow::Error> {
@@ -69,7 +69,7 @@ pub fn parse(value: &Value) -> Result<CommandSet, anyhow::Error> {
     ))
 }
 
-pub async fn execute(command_set: CommandSet, context: CommandExecutorContext) -> Value {
+pub async fn execute(command_set: CommandSet, context: &CommandExecutorContext) -> Value {
     match command_set {
         CommandSet::Ping(command) => command.execute(context).await,
         CommandSet::Echo(command) => command.execute(context).await,

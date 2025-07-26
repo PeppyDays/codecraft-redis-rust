@@ -27,7 +27,7 @@ pub async fn run(listener: TcpListener, repository: Arc<impl Repository>, config
             Ok((mut stream, _)) => {
                 let context = context.clone();
                 tokio::spawn(async move {
-                    handle(context, &mut stream).await;
+                    handle(&context, &mut stream).await;
                 });
             }
             Err(e) => {
@@ -38,7 +38,7 @@ pub async fn run(listener: TcpListener, repository: Arc<impl Repository>, config
 }
 
 async fn handle(
-    context: CommandExecutorContext,
+    context: &CommandExecutorContext,
     stream: &mut (impl AsyncReadExt + AsyncWriteExt + Unpin),
 ) {
     let mut buf = [0; 1024];
@@ -51,7 +51,7 @@ async fn handle(
         let value = value.unwrap();
 
         let command = parse(&value).unwrap();
-        let value = execute(command, context.clone()).await;
+        let value = execute(command, context).await;
 
         write(stream, &value).await;
     }

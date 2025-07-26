@@ -26,7 +26,7 @@ impl Command for Get {
 
 #[async_trait::async_trait]
 impl CommandExecutor for Get {
-    async fn execute(&self, context: CommandExecutorContext) -> Value {
+    async fn execute(&self, context: &CommandExecutorContext) -> Value {
         match context.repository.get(&self.key).await {
             Some(value) => Value::BulkString(value),
             None => Value::Null,
@@ -120,7 +120,7 @@ mod specs_for_execute {
         let get_cmd = Get { key: key.clone() };
 
         // Act
-        let actual = get_cmd.execute(context).await;
+        let actual = get_cmd.execute(&context).await;
 
         // Assert
         let expected = Value::BulkString(value);
@@ -137,7 +137,7 @@ mod specs_for_execute {
         let get_cmd = Get { key: key.clone() };
 
         // Act
-        let actual = get_cmd.execute(context).await;
+        let actual = get_cmd.execute(&context).await;
 
         // Assert
         let expected = Value::Null;

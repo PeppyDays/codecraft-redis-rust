@@ -49,7 +49,7 @@ impl Keys {
 
 #[async_trait::async_trait]
 impl CommandExecutor for Keys {
-    async fn execute(&self, context: CommandExecutorContext) -> Value {
+    async fn execute(&self, context: &CommandExecutorContext) -> Value {
         let entries = context.repository.entries().await;
         let now_in_millis = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -59,7 +59,9 @@ impl CommandExecutor for Keys {
             .into_iter()
             .filter(|entry| {
                 Keys::match_asterisk_pattern(&self.pattern, &entry.key)
-                    && (entry.expiry.is_none() || (entry.expiry.as_ref().map(|e| e.to_millis()).unwrap_or(0) >= now_in_millis))
+                    && (entry.expiry.is_none()
+                        || (entry.expiry.as_ref().map(|e| e.to_millis()).unwrap_or(0)
+                            >= now_in_millis))
             })
             .map(|entry| Value::BulkString(entry.key))
             .collect();
@@ -195,7 +197,7 @@ mod specs_for_execute {
         };
 
         // Act
-        let actual = cmd.execute(context).await;
+        let actual = cmd.execute(&context).await;
 
         // Assert
         let expected = Value::Array(keys.into_iter().map(Value::BulkString).collect());
@@ -228,7 +230,7 @@ mod specs_for_execute {
         };
 
         // Act
-        let actual = cmd.execute(context).await;
+        let actual = cmd.execute(&context).await;
 
         // Assert
         let expected = Value::Array(vec![Value::BulkString(first_key.to_string())]);
@@ -262,7 +264,7 @@ mod specs_for_execute {
         };
 
         // Act
-        let actual = cmd.execute(context).await;
+        let actual = cmd.execute(&context).await;
 
         // Assert
         let expected = Value::Array(vec![Value::BulkString("healingpaper".to_string())]);
@@ -285,17 +287,14 @@ mod specs_for_execute {
                 unit: TimeUnit::Millisecond,
             }),
         };
-        context
-            .repository
-            .set(entry)
-            .await;
+        context.repository.set(entry).await;
         let cmd = Keys {
             pattern: "*".to_string(),
         };
 
         // Act
         sleep(Duration::from_millis(10)).await;
-        let actual = cmd.execute(context).await;
+        let actual = cmd.execute(&context).await;
 
         // Assert
         let expected = Value::Array(vec![]);

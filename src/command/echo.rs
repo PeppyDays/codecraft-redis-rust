@@ -26,7 +26,7 @@ impl Command for Echo {
 
 #[async_trait::async_trait]
 impl CommandExecutor for Echo {
-    async fn execute(&self, _context: CommandExecutorContext) -> Value {
+    async fn execute(&self, _context: &CommandExecutorContext) -> Value {
         Value::BulkString(self.message.clone())
     }
 }
@@ -107,7 +107,7 @@ mod specs_for_execute {
         };
 
         // Act
-        let actual = command.execute(context).await;
+        let actual = command.execute(&context).await;
 
         // Assert
         let expected = Value::BulkString(message);
