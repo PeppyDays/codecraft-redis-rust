@@ -23,10 +23,23 @@ impl Command for InfoReplication {
 #[async_trait::async_trait]
 impl CommandExecutor for InfoReplication {
     async fn execute(&self, context: CommandExecutorContext) -> Value {
-        if context.config.replication.is_some() {
-            return Value::BulkString("role:slave".to_string());
+        let mut properties = Vec::new();
+
+        if context.config.replication.slave.is_some() {
+            properties.push("role:slave".to_string());
+        } else {
+            properties.push("role:master".to_string());
+            properties.push(format!(
+                "master_replid:{}",
+                context.config.replication.master.id,
+            ));
+            properties.push(format!(
+                "master_repl_offset:{}",
+                context.config.replication.master.offset,
+            ));
         }
-        Value::BulkString("role:master".to_string())
+
+        Value::BulkString(properties.join("\r\n"))
     }
 }
 
@@ -70,17 +83,27 @@ mod specs_for_parse_from {
 
 #[cfg(test)]
 mod specs_for_execute {
+    use std::net::Ipv4Addr;
     use std::sync::Arc;
 
     use crate::command::executor::CommandExecutor;
     use crate::command::executor::CommandExecutorContext;
     use crate::command::info_replication::InfoReplication;
     use crate::config::Config;
+    use crate::config::Replication;
+    use crate::config::ReplicationMaster;
+    use crate::config::ReplicationSlave;
     use crate::repository::fixture::DummyRepository;
     use crate::resp::Value;
 
+    #[rstest::rstest]
+    #[case("role:master")]
+    #[case("master_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb")]
+    #[case("master_repl_offset:0")]
     #[tokio::test]
-    async fn sut_responds_replication_role_as_master_if_replication_is_not_set() {
+    async fn sut_responds_master_information_of_replication_if_replication_is_not_set(
+        #[case] expected: &str,
+    ) {
         // Arrange
         let context = CommandExecutorContext {
             repository: Arc::new(DummyRepository),
@@ -89,21 +112,23 @@ mod specs_for_execute {
         let command = InfoReplication;
 
         // Act
-        let actual = command.execute(context).await;
+        let actual = extract_bulk_string(command.execute(context).await).unwrap();
 
         // Assert
-        let expected = Value::BulkString("role:master".to_string());
-        assert_eq!(actual, expected);
+        assert!(actual.contains(expected));
     }
 
     #[tokio::test]
     async fn sut_responds_replication_role_as_slave_if_replication_is_set() {
         // Arrange
         let config = Config {
-            replication: Some(crate::config::Replication {
-                server_host: "localhost".to_string(),
-                server_port: 6380,
-            }),
+            replication: Replication {
+                master: ReplicationMaster::default(),
+                slave: Some(ReplicationSlave {
+                    host: Ipv4Addr::LOCALHOST,
+                    port: 6380,
+                }),
+            },
             ..Default::default()
         };
         let context = CommandExecutorContext {
@@ -113,10 +138,17 @@ mod specs_for_execute {
         let command = InfoReplication;
 
         // Act
-        let actual = command.execute(context).await;
+        let actual = extract_bulk_string(command.execute(context).await).unwrap();
 
         // Assert
-        let expected = Value::BulkString("role:slave".to_string());
-        assert_eq!(actual, expected);
+        let expected = "role:slave";
+        assert!(actual.contains(expected));
+    }
+
+    fn extract_bulk_string(value: Value) -> Result<String, anyhow::Error> {
+        match value {
+            Value::BulkString(str) => Ok(str),
+            _ => Err(anyhow::anyhow!("not a bulk string")),
+        }
     }
 }

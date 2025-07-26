@@ -1,8 +1,9 @@
 use std::net::Ipv4Addr;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use clap::Parser;
-use codecrafters_redis::config::Replication;
+use codecrafters_redis::config::ReplicationSlave;
 use tokio::net::TcpListener;
 
 use codecrafters_redis::config::Config;
@@ -47,9 +48,9 @@ impl From<Args> for Config {
             let parts: Vec<&str> = replication_url.split(' ').collect();
             if parts.len() == 2 {
                 if let Ok(port) = parts[1].parse::<usize>() {
-                    config.replication = Some(Replication {
-                        server_host: parts[0].to_string(),
-                        server_port: port,
+                    config.replication.slave = Some(ReplicationSlave {
+                        host: Ipv4Addr::from_str(parts[0]).unwrap(),
+                        port,
                     });
                 }
             }

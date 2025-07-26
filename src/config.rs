@@ -1,9 +1,10 @@
+use std::net::Ipv4Addr;
 use std::path::Path;
 
 #[derive(Clone, Debug, Default)]
 pub struct Config {
     pub server: Server,
-    pub replication: Option<Replication>,
+    pub replication: Replication,
     pub rdb: Option<RdbConfig>,
 }
 
@@ -18,10 +19,31 @@ impl Default for Server {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Replication {
-    pub server_host: String,
-    pub server_port: usize,
+    pub master: ReplicationMaster,
+    pub slave: Option<ReplicationSlave>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ReplicationMaster {
+    pub id: String,
+    pub offset: usize,
+}
+
+impl Default for ReplicationMaster {
+    fn default() -> Self {
+        Self {
+            id: "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb".to_string(),
+            offset: 0,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ReplicationSlave {
+    pub host: Ipv4Addr,
+    pub port: usize,
 }
 
 #[derive(Clone, Debug)]
