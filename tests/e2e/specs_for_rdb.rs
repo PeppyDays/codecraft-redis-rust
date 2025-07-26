@@ -11,7 +11,7 @@ use crate::server::RedisServer;
 #[tokio::test]
 async fn sut_starts_without_any_keys_and_values_when_dir_and_dbfilename_are_not_provided() {
     // Arrange
-    let config = Config { rdb: None };
+    let config = Config::default();
     let server = RedisServer::new_with_config(config).await;
     let client = RedisClient::new(server.address).await;
 
@@ -38,6 +38,7 @@ async fn sut_starts_without_any_keys_and_values_when_dir_and_dbfilename_are_prov
             directory: rdb_directory.path().to_string_lossy().to_string(),
             filename: "dump.rdb".to_string(),
         }),
+        ..Config::default()
     };
     let server = RedisServer::new_with_config(config).await;
     let client = RedisClient::new(server.address).await;
@@ -65,6 +66,7 @@ async fn sut_loads_entries_in_rdb_file_correctly() {
             directory: rdb_directory.path().to_string_lossy().to_string(),
             filename: "dump.rdb".to_string(),
         }),
+        ..Config::default()
     };
     let server = RedisServer::new_with_config(config).await;
     let client = RedisClient::new(server.address).await;

@@ -13,6 +13,7 @@ async fn sut_responds_dir_in_config_when_clients_sends_config_get_of_dir() {
     let directory: String = DirPath().fake();
     let filename: String = FileName().fake();
     let config = Config {
+        port: 6379,
         rdb: Some(RdbConfig {
             directory: directory.clone(),
             filename: filename.clone(),

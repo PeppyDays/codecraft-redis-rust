@@ -1,11 +1,21 @@
 use std::path::Path;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Config {
+    pub port: usize,
     pub rdb: Option<RdbConfig>,
 }
 
-#[derive(Clone, Debug, Default)]
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            port: 6379,
+            rdb: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct RdbConfig {
     pub directory: String,
     pub filename: String,
@@ -21,10 +31,11 @@ impl RdbConfig {
 }
 
 impl Config {
-    pub fn get(&self, arg: &str) -> Option<&str> {
+    pub fn get(&self, arg: &str) -> Option<String> {
         match arg {
-            "dir" => self.rdb.as_ref().map(|rdb| rdb.directory.as_str()),
-            "dbfilename" => self.rdb.as_ref().map(|rdb| rdb.filename.as_str()),
+            "port" => Some(self.port.to_string()),
+            "dir" => self.rdb.as_ref().map(|rdb| rdb.directory.clone()),
+            "dbfilename" => self.rdb.as_ref().map(|rdb| rdb.filename.clone()),
             _ => None,
         }
     }

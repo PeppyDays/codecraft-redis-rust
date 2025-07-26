@@ -1,3 +1,4 @@
+use std::net::Ipv4Addr;
 use std::sync::Arc;
 
 use clap::Parser;
@@ -13,7 +14,8 @@ async fn main() {
     let args = Args::parse();
     let config = Arc::new(Config::from(args));
 
-    let listener = TcpListener::bind("127.0.0.1:6379").await.unwrap();
+    let url = format!("{}:{}", Ipv4Addr::LOCALHOST, config.port);
+    let listener = TcpListener::bind(url).await.unwrap();
     let repository = Arc::new(InMemoryRepository::new());
     run(listener, repository, config).await
 }
@@ -25,18 +27,22 @@ struct Args {
 
     #[arg(long = "dbfilename")]
     rdb_filename: Option<String>,
+
+    #[arg(long = "port")]
+    port: Option<usize>,
 }
 
 impl From<Args> for Config {
     fn from(args: Args) -> Self {
-        if args.rdb_directory.is_none() && args.rdb_filename.is_none() {
-            return Config { rdb: None };
-        }
-        Config {
-            rdb: Some(RdbConfig {
+        let mut config = Config::default();
+
+        if args.rdb_directory.is_some() && args.rdb_filename.is_some() {
+            config.rdb = Some(RdbConfig {
                 directory: args.rdb_directory.unwrap(),
                 filename: args.rdb_filename.unwrap(),
-            }),
-        }
+            });
+        };
+
+        config
     }
 }
