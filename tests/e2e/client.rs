@@ -78,6 +78,12 @@ impl RedisClient {
         self.read_from_stream().await
     }
 
+    pub async fn info_replication(&self) -> String {
+        let buf = b"*2\r\n$4\r\nINFO\r\n$11\r\nreplication\r\n";
+        self.write_to_stream(buf).await;
+        self.read_from_stream().await
+    }
+
     async fn write_to_stream(&self, buf: &[u8]) {
         self.stream.lock().await.write_all(buf).await.unwrap();
     }

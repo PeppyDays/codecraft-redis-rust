@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::command::config_get::ConfigGet;
 use crate::command::echo::Echo;
 use crate::command::get::Get;
+use crate::command::info_replication::InfoReplication;
 use crate::command::keys::Keys;
 use crate::command::ping::Ping;
 use crate::command::set::Set;
@@ -21,6 +22,7 @@ pub enum CommandSet {
     Get(Get),
     Keys(Keys),
     ConfigGet(ConfigGet),
+    InfoReplication(InfoReplication),
 }
 
 #[derive(Clone)]
@@ -41,37 +43,41 @@ pub trait CommandExecutor {
 }
 
 pub fn parse(value: &Value) -> Result<CommandSet, anyhow::Error> {
-    if let Ok(ping) = Ping::parse_from(value) {
-        return Ok(CommandSet::Ping(ping));
+    if let Ok(command) = Ping::parse_from(value) {
+        return Ok(CommandSet::Ping(command));
     }
-    if let Ok(echo) = Echo::parse_from(value) {
-        return Ok(CommandSet::Echo(echo));
+    if let Ok(command) = Echo::parse_from(value) {
+        return Ok(CommandSet::Echo(command));
     }
-    if let Ok(set) = Set::parse_from(value) {
-        return Ok(CommandSet::Set(set));
+    if let Ok(command) = Set::parse_from(value) {
+        return Ok(CommandSet::Set(command));
     }
-    if let Ok(get) = Get::parse_from(value) {
-        return Ok(CommandSet::Get(get));
+    if let Ok(command) = Get::parse_from(value) {
+        return Ok(CommandSet::Get(command));
     }
-    if let Ok(keys) = Keys::parse_from(value) {
-        return Ok(CommandSet::Keys(keys));
+    if let Ok(command) = Keys::parse_from(value) {
+        return Ok(CommandSet::Keys(command));
     }
-    if let Ok(config_get) = ConfigGet::parse_from(value) {
-        return Ok(CommandSet::ConfigGet(config_get));
+    if let Ok(command) = ConfigGet::parse_from(value) {
+        return Ok(CommandSet::ConfigGet(command));
+    }
+    if let Ok(command) = InfoReplication::parse_from(value) {
+        return Ok(CommandSet::InfoReplication(command));
     }
     Err(anyhow::anyhow!(
         "unable to parse value as any supported command"
     ))
 }
 
-pub async fn execute(command: CommandSet, context: CommandExecutorContext) -> Value {
-    match command {
-        CommandSet::Ping(ping) => ping.execute(context).await,
-        CommandSet::Echo(echo) => echo.execute(context).await,
-        CommandSet::Set(set) => set.execute(context).await,
-        CommandSet::Get(get) => get.execute(context).await,
-        CommandSet::Keys(keys) => keys.execute(context).await,
-        CommandSet::ConfigGet(config_get) => config_get.execute(context).await,
+pub async fn execute(command_set: CommandSet, context: CommandExecutorContext) -> Value {
+    match command_set {
+        CommandSet::Ping(command) => command.execute(context).await,
+        CommandSet::Echo(command) => command.execute(context).await,
+        CommandSet::Set(command) => command.execute(context).await,
+        CommandSet::Get(command) => command.execute(context).await,
+        CommandSet::Keys(command) => command.execute(context).await,
+        CommandSet::ConfigGet(command) => command.execute(context).await,
+        CommandSet::InfoReplication(command) => command.execute(context).await,
     }
 }
 

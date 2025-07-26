@@ -5,12 +5,12 @@ authors = ["Codecrafters <hello@codecrafters.io>"]
 edition = "2024"
 
 [dependencies]
-anyhow = "1"                                   # error handling
+anyhow = "1"
 async-trait = "0"
-bytes = "1"                                    # helps manage buffers
+bytes = "1"
 clap = { version = "4", features = ["derive"] }
-thiserror = "2"                                # error handling
-tokio = { version = "1", features = ["full"] } # async networking
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
 async-stream = "0"
 futures = "0"
 
