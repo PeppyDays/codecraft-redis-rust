@@ -22,7 +22,10 @@ impl Command for InfoReplication {
 
 #[async_trait::async_trait]
 impl CommandExecutor for InfoReplication {
-    async fn execute(&self, _context: CommandExecutorContext) -> Value {
+    async fn execute(&self, context: CommandExecutorContext) -> Value {
+        if context.config.replication.is_some() {
+            return Value::BulkString("role:slave".to_string());
+        }
         Value::BulkString("role:master".to_string())
     }
 }
@@ -76,9 +79,8 @@ mod specs_for_execute {
     use crate::repository::fixture::DummyRepository;
     use crate::resp::Value;
 
-    #[rstest::rstest]
     #[tokio::test]
-    async fn sut_responds_replication_role_correctly() {
+    async fn sut_responds_replication_role_as_master_if_replication_is_not_set() {
         // Arrange
         let context = CommandExecutorContext {
             repository: Arc::new(DummyRepository),
@@ -91,6 +93,30 @@ mod specs_for_execute {
 
         // Assert
         let expected = Value::BulkString("role:master".to_string());
+        assert_eq!(actual, expected);
+    }
+
+    #[tokio::test]
+    async fn sut_responds_replication_role_as_slave_if_replication_is_set() {
+        // Arrange
+        let config = Config {
+            replication: Some(crate::config::Replication {
+                server_host: "localhost".to_string(),
+                server_port: 6380,
+            }),
+            ..Default::default()
+        };
+        let context = CommandExecutorContext {
+            repository: Arc::new(DummyRepository),
+            config: Arc::new(config),
+        };
+        let command = InfoReplication;
+
+        // Act
+        let actual = command.execute(context).await;
+
+        // Assert
+        let expected = Value::BulkString("role:slave".to_string());
         assert_eq!(actual, expected);
     }
 }

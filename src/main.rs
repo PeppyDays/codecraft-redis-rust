@@ -2,6 +2,7 @@ use std::net::Ipv4Addr;
 use std::sync::Arc;
 
 use clap::Parser;
+use codecrafters_redis::config::Replication;
 use tokio::net::TcpListener;
 
 use codecrafters_redis::config::Config;
@@ -14,7 +15,7 @@ async fn main() {
     let args = Args::parse();
     let config = Arc::new(Config::from(args));
 
-    let url = format!("{}:{}", Ipv4Addr::LOCALHOST, config.port);
+    let url = format!("{}:{}", Ipv4Addr::LOCALHOST, config.server.port);
     let listener = TcpListener::bind(url).await.unwrap();
     let repository = Arc::new(InMemoryRepository::new());
     run(listener, repository, config).await
@@ -29,15 +30,29 @@ struct Args {
     rdb_filename: Option<String>,
 
     #[arg(long = "port")]
-    port: Option<usize>,
+    server_port: Option<usize>,
+
+    #[arg(long = "replicaof")]
+    replication_url: Option<String>,
 }
 
 impl From<Args> for Config {
     fn from(args: Args) -> Self {
         let mut config = Config::default();
 
-        if let Some(port) = args.port {
-            config.port = port;
+        if let Some(server_port) = args.server_port {
+            config.server.port = server_port;
+        }
+        if let Some(replication_url) = args.replication_url {
+            let parts: Vec<&str> = replication_url.split(' ').collect();
+            if parts.len() == 2 {
+                if let Ok(port) = parts[1].parse::<usize>() {
+                    config.replication = Some(Replication {
+                        server_host: parts[0].to_string(),
+                        server_port: port,
+                    });
+                }
+            }
         }
         if args.rdb_directory.is_some() && args.rdb_filename.is_some() {
             config.rdb = Some(RdbConfig {
