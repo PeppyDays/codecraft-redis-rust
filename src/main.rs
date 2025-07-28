@@ -44,15 +44,9 @@ impl From<Args> for Config {
             config.server.port = server_port;
         }
         if let Some(replication_url) = args.replication_url {
-            let parts: Vec<&str> = replication_url.split(' ').collect();
-            if parts.len() == 2 {
-                if let Ok(port) = parts[1].parse::<usize>() {
-                    config.replication.slave = Some(ReplicationSlave {
-                        host: parts[0].to_string(),
-                        port,
-                    });
-                }
-            }
+            config.replication.slave = Some(ReplicationSlave {
+                master_address: replication_url.replace(' ', ":"),
+            })
         }
         if args.rdb_directory.is_some() && args.rdb_filename.is_some() {
             config.rdb = Some(RdbConfig {

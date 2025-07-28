@@ -8,6 +8,7 @@ use crate::command::executor::CommandExecutorContext;
 use crate::command::executor::execute;
 use crate::command::executor::parse;
 use crate::config::Config;
+use crate::replication::Replicator;
 use crate::repository::Repository;
 use crate::resp::Value;
 use crate::snapshot::load;
@@ -20,6 +21,18 @@ pub async fn run(listener: TcpListener, repository: Arc<impl Repository>, config
         if let Ok(file) = File::open(path).await {
             load(file, repository).await;
         }
+    }
+
+    if config.replication.is_slave() {
+        let master_address = &config
+            .replication
+            .slave
+            .as_ref()
+            .unwrap()
+            .master_address
+            .clone();
+        let mut replicator = Replicator::new(master_address).await;
+        replicator.initiate().await;
     }
 
     loop {

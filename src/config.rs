@@ -24,6 +24,16 @@ pub struct Replication {
     pub slave: Option<ReplicationSlave>,
 }
 
+impl Replication {
+    pub fn is_master(&self) -> bool {
+        self.slave.is_none()
+    }
+
+    pub fn is_slave(&self) -> bool {
+        self.slave.is_some()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ReplicationMaster {
     pub id: String,
@@ -41,8 +51,7 @@ impl Default for ReplicationMaster {
 
 #[derive(Clone, Debug)]
 pub struct ReplicationSlave {
-    pub host: String,
-    pub port: usize,
+    pub master_address: String,
 }
 
 #[derive(Clone, Debug)]

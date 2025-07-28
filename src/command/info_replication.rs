@@ -25,7 +25,7 @@ impl CommandExecutor for InfoReplication {
     async fn execute(&self, context: &CommandExecutorContext) -> Value {
         let mut properties = Vec::new();
 
-        if context.config.replication.slave.is_some() {
+        if context.config.replication.is_slave() {
             properties.push("role:slave".to_string());
         } else {
             properties.push("role:master".to_string());
@@ -124,8 +124,7 @@ mod specs_for_execute {
             replication: Replication {
                 master: ReplicationMaster::default(),
                 slave: Some(ReplicationSlave {
-                    host: "localhost".to_string(),
-                    port: 6380,
+                    master_address: "localhost:6380".to_string(),
                 }),
             },
             ..Default::default()

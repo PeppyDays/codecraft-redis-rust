@@ -9,18 +9,18 @@ use crate::server::RedisServer;
 #[tokio::test]
 async fn sut_responds_replication_role_as_slave_if_replication_is_set() {
     // Arrange
+    let master_server = RedisServer::new().await;
     let config = Config {
         replication: Replication {
             master: ReplicationMaster::default(),
             slave: Some(ReplicationSlave {
-                host: "localhost".to_string(),
-                port: 6380,
+                master_address: format!("localhost:{}", master_server.address.port()),
             }),
         },
         ..Default::default()
     };
-    let server = RedisServer::new_with_config(config).await;
-    let client = RedisClient::new(server.address).await;
+    let slave_server = RedisServer::new_with_config(config).await;
+    let client = RedisClient::new(slave_server.address).await;
 
     // Act
     let actual = client.info_replication().await;
